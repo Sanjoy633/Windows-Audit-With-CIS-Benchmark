@@ -105,7 +105,7 @@ $Author = @"
 '   ##::: ##: ##:::: ##: ##.... ##: ##::: ##:::::::::::::::: ##:. ##::
 '  . ######:: ########:: ##:::: ##:. ######::::::::::::::::: ##::. ##:
 '  :......:::........:::..:::::..:::......::::::::::::::::::..::::..::
-'  ::::::::::::::::SECURITY::::AUDIT:::SERVICES:::::::::::::::::::::::
+'  ::::::::::::::::SECURITY:::AUDIT:::SERVICES::::::::::::::::::::::::
 
 
 "@
@@ -158,12 +158,31 @@ Function Reverse-SID ($chaineSID) {
       $outpuReverseSid += $ligne + ", "
     }
   }
-
-  
+  if($outpuReverseSid.Length -le 2){
+	$outpuReverseSid = "";  
+  }
 
   return $outpuReverseSid
 
 }
+
+function ContentHTML($ComplianceIndex,$ComplianceName,$CurrentValue, $ComplianceOrNot) {
+	
+$ContentHTML	= "<tr ><td>$ComplianceIndex</td>"
+$ContentHTML	= "$ContentHTML <td>$ComplianceName</td>"
+$ContentHTML	= "$ContentHTML <td>$CurrentValue</td>"
+if ($ComplianceOrNot) {    
+$ContentHTML	= "$ContentHTML <td class='true'>Compliance</td>"
+Write-Host "       [+] "$ComplianceName -ForegroundColor Green
+}
+  else {
+$ContentHTML	= "$ContentHTML <td class='false'>Non Compliance</td>"
+Write-Host "       [-] "$ComplianceName -ForegroundColor Red
+  }
+$ContentHTML	= "$ContentHTML </tr>"
+return $ContentHTML
+}
+<#
 # convert ComplianceOrNotHTML 
 function ComplianceOrNotToHTML($flag) {
   if ($flag) {    
@@ -181,6 +200,7 @@ function ComplianceWriteHost($ComplianceName,$flag) {
     Write-Host "       [-] "$ComplianceName -ForegroundColor Red
   }
 }
+#>
 
 # convert Stringarray to comma separated liste (String)
 function StringArrayToList($StringArray) {
@@ -257,16 +277,16 @@ $traitement = $null
 Write-Host "       [+] Take File to analyse `n" -ForegroundColor DarkGreen
 $seceditfile = "./secpol" + "-" + "$OSName" + ".cfg"
 secedit /export /cfg $seceditfile | out-null
-$gpofile = "./gpo" + "-" + "$OSName" + ".txt"
-gpresult /r /V > $gpofile | out-null
-$gpofile = "./gpo" + "-" + "$OSName" + ".html"
-gpresult /h $gpofile /f | out-null
+$gpoFile = "./gpo" + "-" + "$OSName" + ".txt"
+gpresult /r /V > $gpoFile | out-null
+$gpoFile = "./gpo" + "-" + "$OSName" + ".html"
+gpresult /h $gpoFile /f | out-null
 #Second command in case of emergency
 
 
-$auditconfigfile = "./auditpolicy" + "-" + "$OSName" + ".txt"
+$auditConfigFile = "./auditpolicy" + "-" + "$OSName" + ".txt"
 
-auditpol.exe /get /Category:* > $auditconfigfile | out-null
+auditpol.exe /get /Category:* > $auditConfigFile | out-null
 
 
 
@@ -325,7 +345,7 @@ $NetworkAdapterInfo = $IPInfo | ConvertTo-Html -Fragment -PreContent "<h2>Networ
 #The command below will get first 10 services information, convert the result to HTML code as table and store it to a variable
 
 #Store the service information to an HTML file
-$htmlServiceFileName = "./Services-" + "-" + "$OSName" + ".html"
+$htmlServiceFileName = "./SERVICES" + "-" + "$OSName" + ".html"
 #$ServicesInfo = Get-CimInstance -ClassName Win32_Service | Select-Object -First 10  |ConvertTo-Html -Property Name,DisplayName,State -Fragment -PreContent "<h2>Services Information</h2>"
 $ServicesInfo = Get-CimInstance -ClassName Win32_Service | ConvertTo-Html -Property Name,DisplayName,State -Fragment -PreContent "<h2>Services Information of ($OSName)</h2>" > $htmlServiceFileName
 $ServicesInfo = Get-CimInstance -ClassName Win32_Service | Select-Object -First 10  |ConvertTo-Html -Property Name,DisplayName,State -Fragment -PreContent "<h2>Services Information</h2>"
@@ -338,12 +358,16 @@ $ServicesInfo = $ServicesInfo -replace '<td>Stopped</td>','<td class="StopStatus
 
 $LocalAccountInfo =  Get-WmiObject -Class Win32_UserAccount -Filter  "LocalAccount='True'" |
         Select-Object  Caption, Status, PasswordExpires, AccountType, Description, Disabled, Domain, FullName, InstallDate, LocalAccount, Lockout, Name, PasswordChangeable, PasswordRequired, SID, SIDType | 
-		 ConvertTo-Html  -Property Name, Caption, Disabled, Description, Status, PasswordRequired  -PreContent "<h2>LOCAL ACCOUNTS INFORMATION</h2>"
+		 ConvertTo-Html  -Property Name, Caption,  Disabled, Description  -PreContent "<h2>LOCAL ACCOUNTS INFORMATION</h2>"
 
+$LocalAccountInfo > "LocalAccounts-$OSName.html"
 $LocalAccountInfo = $LocalAccountInfo -replace '<td>True</td>','<td class="true">True</td>'
 $LocalAccountInfo = $LocalAccountInfo -replace '<td>False</td>','<td class="false">False</td>'
 
-$TableContentHead =  '<h2>WINDOWS COMPLIANCE</h2>'
+
+
+
+$ComplianceHTMLHead =  '<h2>WINDOWS COMPLIANCE</h2>'
 
 #Write-Host
 #Write-Host Local Password Policy -ForegroundColor DarkGreen
@@ -353,91 +377,73 @@ $TableContentHead =  '<h2>WINDOWS COMPLIANCE</h2>'
 
 
 
-Write-Host "Checking CIS Benchmark" -ForegroundColor Green 
+Write-Host "CHECKING CIS BENCHMARKS" -ForegroundColor Green 
 Start-Sleep -s 2
 #Check password Policy
-Write-Host "`n [+] Begin password policy audit`n" -ForegroundColor DarkGreen
+Write-Host "`n [+] Begin Password Policy Audit`n" -ForegroundColor DarkGreen
 Start-Sleep -s 1
 #Check Enforce password history
-$ComplianceCount = 0
-$TableContent = "$TableContent <table > <tbody><th width='5%'>Sl. No.</th><th width='50%'>Findings</th><th width='30%'>Current Value</th><th width='15%'>Compliance or Not</th></tbody><tbody>"
+$ComplianceIndex = 0
+$ComplianceHTML = "$ComplianceHTML <table > <tbody><th width='5%'>Sl. No.</th><th width='50%'>Findings</th><th width='30%'>Current Value</th><th width='15%'>Compliance or Not</th></tbody><tbody>"
 
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
 $ComplianceName		= "Ensure 'Enforce password history' is set to '24 or more password(s)'"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
 $traitement		= Get-Content $seceditfile |Select-String "PasswordHistorySize" 
-$CurrentValue	= '<td>'+$traitement +'</td>'
+$CurrentValue	= $traitement 
 $traitement 	= $traitement  -replace "[^0-9]" , ''
 $ComplianceOrNot	= ($traitement  -ge "24") 
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 
 #Check Maximum password age 
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
 $ComplianceName		= "'Maximum password age' is set to '60 or fewer days, but not 0'"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
 $traitement		= Get-Content $seceditfile |Select-String "MaximumPasswordAge" |select-object -First 1 
-$CurrentValue	= '<td>'+$traitement +'</td>'
+$CurrentValue	= $traitement 
 $traitement 	= $traitement  -replace "[^0-9]" , ''
 $ComplianceOrNot	= (($traitement  -gt "0") -and ($traitement  -le "60" )) 
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 
 #Check Minimum password age
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
 $ComplianceName		= "Minimum password age' is set to '1 or more day"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
 $traitement		= Get-Content $seceditfile |Select-String "MinimumPasswordAge"
-$CurrentValue	= '<td>'+$traitement +'</td>'
+$CurrentValue	= $traitement 
 $traitement 	= $traitement  -replace "[^0-9]" , ''
 $ComplianceOrNot	= ($traitement  -ge "1") 
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 
 #Check Minimum password length
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
 $ComplianceName		= "Ensure 'Minimum password length' is set to '14 or more character(s)'"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
 $traitement		= Get-Content $seceditfile |Select-String "MinimumPasswordLength"
-$CurrentValue	= '<td>'+$traitement +'</td>'
+$CurrentValue	= $traitement 
 $traitement 	= $traitement  -replace "[^0-9]" , ''
 $ComplianceOrNot	= ($traitement  -ge "1") 
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 
 #Check Password must meet complexity requirements
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
 $ComplianceName		= "Ensure 'Password must meet complexity requirements' is set to 'Enabled'"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
 $traitement		= Get-Content $seceditfile |Select-String "PasswordComplexity"
-$CurrentValue	= '<td>'+$traitement +'</td>'
+$CurrentValue	= $traitement 
 $traitement 	= $traitement  -replace "[^0-9]" , ''
 $ComplianceOrNot	= ($traitement  -match "1") 
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 
 #Check Store passwords using reversible encryption
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
 $ComplianceName		= "Ensure 'Store passwords using reversible encryption' is set to 'Disabled'"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
 $traitement		= Get-Content $seceditfile |Select-String "ClearTextPassword"
-$CurrentValue	= '<td>'+$traitement +'</td>'
+$CurrentValue	= $traitement 
 $traitement 	= $traitement  -replace "[^0-9]" , ''
 $ComplianceOrNot	= ($traitement  -match "0") 
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 
 
 #check net accounts intel
@@ -446,240 +452,589 @@ $nomfichierNetAccount = "./AccountsPolicy- " + "$OSName" + ".txt"
 net accounts > $nomfichierNetAccount
 
 #Check lock out policy
-Write-Host "`n [+] Begin account lockout policy audit`n" -ForegroundColor DarkGreen
+Write-Host "`n [+] Begin Account Lockout Policy Audit`n" -ForegroundColor DarkGreen
 Start-Sleep -s 1
 #Check Account lockout duration
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
 $ComplianceName		= "Make sure 'Account lockout duration' is set to '15 or more minutes'"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
 $traitement		= Get-Content $nomfichierNetAccount |Select-String -pattern '(Durée du verrouillage)|(Lockout duration)'
-$CurrentValue	= '<td>'+$traitement +'</td>'
+$CurrentValue	= $traitement 
 $traitement 	= $traitement  -replace "[^0-9]" , ''
 $ComplianceOrNot	= ($traitement  -ge "15") 
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 
 #Check Account lockout duration
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
 $ComplianceName		= "Make sure 'Account lockout threshold' is set to '10 or fewer invalid logon attempts, but not 0'"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
 $traitement		= Get-Content $nomfichierNetAccount |Select-String -pattern '(Seuil de verrouillage)|(Lockout threshold)'
-$CurrentValue	= '<td>'+$traitement +'</td>'
+$CurrentValue	= $traitement 
 $traitement 	= $traitement  -replace "[^0-9]" , ''
 $ComplianceOrNot	= (($traitement  -gt "0") -and ($traitement  -le "10" )) 
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 
 #Check Reset account lockout 
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
 $ComplianceName		= "Ensure 'Reset account lockout counter after' is set to '15 or more minute(s)'"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
 $traitement		= Get-Content $nomfichierNetAccount |Select-String -pattern "(Fenêtre d'observation du verrouillage)|(Lockout observation window)"
-$CurrentValue	= '<td>'+$traitement +'</td>'
+$CurrentValue	= $traitement 
 $traitement 	= $traitement  -replace "[^0-9]" , ''
 $ComplianceOrNot	= ($traitement  -ge "15") 
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 
 
 #Check user rights assignment audit
-Write-Host "`n [+] Begin user rights assignment audit `n" -ForegroundColor DarkGreen
+Write-Host "`n [+] Begin User Rights Assignment Audit `n" -ForegroundColor DarkGreen
 Start-Sleep -s 1
 #Check Account lockout duration
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
 $ComplianceName		= "Ensure 'Access Credential Manager as a trusted caller' is set to 'No One'"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
 $traitement		= Get-Content $seceditfile |Select-String "SeTrustedCredManAccessPrivilege"
-$CurrentValue	= '<td>'+$traitement +'</td>'
+$CurrentValue	= $traitement 
 #$traitement 	= $traitement  -replace "[^0-9]" , ''
 $ComplianceOrNot	= (-Not($traitement  -match "SeTrustedCredManAccessPrivilege")) 
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 
 #Check Access this computer from the network
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
 $ComplianceName		= "Ensure 'Access this computer from the network' is set to 'Administrators, Remote Desktop Users'"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
 $chaineSID = Get-Content $seceditfile |Select-String "SeNetworkLogonRight" 
 $chaineSID = $chaineSID.line
 $traitement = Reverse-SID $chaineSID
-$CurrentValue	= '<td>'+$traitement +'</td>'
+$CurrentValue	= $traitement 
 $ComplianceOrNot	= ($traitement  -notmatch "Everyone") 
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 
 #Check Act as part of the operating system
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
 $ComplianceName		= "Ensure 'Act as part of the operating system' is set to 'No One'"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
-$traitement = Get-Content $seceditfile |Select-String "SeTcbPrivilege"
-$CurrentValue	= '<td>'+$traitement +'</td>'
-$ComplianceOrNot	= (-Not($traitement  -match "SeTcbPrivilege"))  
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$chaineSID = Get-Content $seceditfile |Select-String "SeTcbPrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= ($traitement.Length -eq 0)
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 
 <#
 ###Ensure 'Add workstations to domain' is set to 'Administrators'
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
+
 $ComplianceName		= "(L1)Ensure 'Add workstations to domain' is set to 'Administrators', Must be Administrators "
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
+
 $chaineSID = Get-Content $seceditfile |Select-String "SeMachineAccountPrivilege"
 $chaineSID = $chaineSID.line
 $traitement = Reverse-SID $chaineSID
-$CurrentValue	= '<td>'+$traitement +'</td>'
+$CurrentValue	= $traitement 
 $ComplianceOrNot	= if ($traitement  -match "Administrator") 
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 #>
 
 #Check Adjust memory quotas for a process
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
 $ComplianceName		= "Make sure 'Adjust memory quotas for a process' is set to 'Administrators, LOCAL SERVICE, NETWORK SERVICE'"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
 $chaineSID = Get-Content $seceditfile |Select-String "SeIncreaseQuotaPrivilege"
 $chaineSID = $chaineSID.line
 $traitement = Reverse-SID $chaineSID
-$CurrentValue	= '<td>'+$traitement +'</td>'
-$ComplianceOrNot	= (($traitement  -match "Administrators")-and ($traitement  -match "LOCAL SERVICE") -and ($traitement  -match "NETWORK SERVICE")) 
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators")-and ($traitement  -match "LOCAL SERVICE") -and ($traitement  -match "NETWORK SERVICE"))
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 
 #Check Allow log on locally
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
 $ComplianceName		= "Ensure 'Allow log on locally' is set to 'Administrators, Users'"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
 $chaineSID = Get-Content $seceditfile |Select-String "SeInteractiveLogonRight"
 $chaineSID = $chaineSID.line
 $traitement = Reverse-SID $chaineSID
-$CurrentValue	= '<td>'+$traitement +'</td>'
+$CurrentValue	= $traitement 
 $ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement  -notmatch "Guest")  -and ($traitement  -notmatch "Everyone"))
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 
 #Check Allow log on through Remote Desktop Services
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
 $ComplianceName		= "Ensure 'Allow log on through Remote Desktop Services' is set to 'Administrators, Remote Desktop Users'"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
 $chaineSID = Get-Content $seceditfile |Select-String "SeRemoteInteractiveLogonRight"
 $chaineSID = $chaineSID.line
 $traitement = Reverse-SID $chaineSID
-$CurrentValue	= '<td>'+$traitement +'</td>'
+$CurrentValue	= $traitement 
 $ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement  -match "Remote Desktop Users") -and ($traitement  -notmatch "Guest") ) 
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 
 #Check Back up files and directories
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
 $ComplianceName		= "Make sure 'Back up files and directories' is set to 'Administrators'"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
 $chaineSID = Get-Content $seceditfile |Select-String "SeBackupPrivilege"
 $chaineSID = $chaineSID.line
 $traitement = Reverse-SID $chaineSID
-$CurrentValue	= '<td>'+$traitement +'</td>'
-$ComplianceOrNot	= (($traitement  -match "Administrators")-and ($traitement  -notmatch "Backup Operators")   -and ($traitement  -notmatch "Guest")  -and ($traitement  -notmatch "Everyone"))
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement.Length -lt 30)) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 
 #Check Change the system time
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
 $ComplianceName		= "Make sure 'Change the system time' is set to 'Administrators, LOCAL SERVICE'"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
 $chaineSID = Get-Content $seceditfile |Select-String "SeSystemtimePrivilege"
 $chaineSID = $chaineSID.line
 $traitement = Reverse-SID $chaineSID
-$CurrentValue	= '<td>'+$traitement +'</td>'
+$CurrentValue	= $traitement 
 $ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement  -match "LOCAL SERVICE") -and ($traitement  -notmatch "autotimesvc")  -and ($traitement  -notmatch "Everyone")) 
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 
 #Check Change the time zone
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
 $ComplianceName		= "Make sure 'Change the time zone' is set to 'Administrators, LOCAL SERVICE'"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
 $chaineSID = Get-Content $seceditfile |Select-String "SeTimeZonePrivilege"
 $chaineSID = $chaineSID.line
 $traitement = Reverse-SID $chaineSID
-$CurrentValue	= '<td>'+$traitement +'</td>'
+$CurrentValue	= $traitement 
 $ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement  -match "LOCAL SERVICE") -and ($traitement  -notmatch "Users") -and ($traitement  -notmatch "Guest")  -and ($traitement  -notmatch "Everyone")) 
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 
 #Check Create a pagefile
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+$ComplianceIndex +=1
 $ComplianceName		= "Ensure 'Create a pagefile' is set to 'Administrators'"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
 $chaineSID = Get-Content $seceditfile |Select-String "SeCreatePagefilePrivilege"
 $chaineSID = $chaineSID.line
 $traitement = Reverse-SID $chaineSID
-$CurrentValue	= '<td>'+$traitement +'</td>'
-$ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement  -notmatch "Users") -and ($traitement  -notmatch "Guest")  -and ($traitement  -notmatch "Everyone")) 
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement.Length -lt 30)) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 
-#Check Create a pagefile
-$ComplianceCount +=1
-$TableContent	= "$TableContent <tr ><td>$ComplianceCount</td>"
+#Check Create a token object
+$ComplianceIndex +=1
 $ComplianceName		= "Ensure 'Create a token object' is set to 'No One'"
-$TableContent	= "$TableContent <td>$ComplianceName</td>"
 $chaineSID = Get-Content $seceditfile |Select-String "SeCreateTokenPrivilege"
 $chaineSID = $chaineSID.line
 $traitement = Reverse-SID $chaineSID
-$CurrentValue	= '<td>'+$traitement +'</td>'
-$ComplianceOrNot	= (($traitement  -notmatch "Administrators") -and ($traitement  -notmatch "Users") -and ($traitement  -notmatch "Guest")  -and ($traitement  -notmatch "Everyone")) 
-$ComplianceOrNotHTML = ComplianceOrNotToHTML $ComplianceOrNot
-ComplianceWriteHost $ComplianceName  $ComplianceOrNot
-$TableContent = "$TableContent $CurrentValue $ComplianceOrNotHTML </tr>"
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= ($traitement.Length -eq 0)
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Create global objects
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Create global objects' is set to 'Administrators, LOCAL SERVICE, NETWORK SERVICE, SERVICE'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeCreateGlobalPrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement  -match "LOCAL SERVICE")  -and ($traitement  -match "SERVICE")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Create permanent shared objects
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Create permanent shared objects' is set to 'No One'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeCreatePermanentPrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= ($traitement.Length -eq 0)
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Create symbolic links
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Create symbolic links'  is set to 'Administrators'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeCreateSymbolicLinkPrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement.Length -lt 30)) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Debug programs
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Debug programs' is set to 'Administrators'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeDebugPrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement.Length -lt 30)) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Deny access to this computer from the network
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Deny access to this computer from the network' to include 'Guests, Local account'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeDenyNetworkLogonRight"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Guest") -and ($traitement  -match "Local account")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Deny log on as a batch job
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Deny log on as a batch job' to include 'Guests'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeDenyBatchLogonRight"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Guest")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Deny log on as a service
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Deny log on as a service' to include 'Guests'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeDenyServiceLogonRight"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Guest")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Deny log on locally
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Deny log on locally' to include 'Guests'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeDenyInteractiveLogonRight"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Guest")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Deny logon through Remote Desktop Services
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Deny logon through Remote Desktop Services' to include 'Guests, Local account'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeDenyRemoteInteractiveLogonRight"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Guest") -and ($traitement  -match "Local account")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Enable computer and user accounts to be trusted for delegation
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Enable computer and user accounts to be trusted for delegation' is set to 'No One'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeEnableDelegationPrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement.Length -eq 0)) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Force shutdown from a remote system
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Force shutdown from a remote system' is set to 'Administrators'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeRemoteShutdownPrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement.Length -lt 30)) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Generate security audits
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Generate security audits' is set to 'LOCAL SERVICE, NETWORK SERVICE'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeAuditPrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "LOCAL SERVICE")  -and ($traitement  -match "NETWORK SERVICE"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Impersonate a client after authentication
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Impersonate a client after authentication' is set to 'Administrators, LOCAL SERVICE, NETWORK SERVICE, SERVICE'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeImpersonatePrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement  -match "LOCAL SERVICE")  -and ($traitement  -match "NETWORK SERVICE")-and ($traitement  -match "NT AUTHORITY\\SERVICE"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Increase scheduling priority
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Increase scheduling priority' is set to 'Administrators, Window Manager\Window Manager Group'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeIncreaseBasePriorityPrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement  -match "Window Manager\\Window Manager Group"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Load and unload device drivers
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Load and unload device drivers' is set to 'Administrators'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeLoadDriverPrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators")-and ($traitement.Length -lt 30))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Lock pages in memory
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Lock pages in memory' is set to 'No One'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeLockMemoryPrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= ($traitement.Length -eq 0) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Log on as a batch job
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Log on as a batch job' is set to 'Administrators'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeBatchLogonRight"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators")-and ($traitement.Length -lt 30))
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 
 
+#Check Log on as a service
+$ComplianceIndex +=1
+$ComplianceName		= "Configure 'Log on as a service'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeServiceLogonRight"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators")-and ($traitement.Length -lt 30))
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 
+#Check Manage auditing and security log
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Manage auditing and security log' is set to 'Administrators'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeSecurityPrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators")-and ($traitement.Length -lt 30))
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 
+#Check Modify an object label
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Modify an object label' is set to 'No One'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeRelabelPrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= ($traitement.Length -eq 0) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 
+#Check Modify firmware environment values
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Modify firmware environment values' is set to 'Administrators'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeSystemEnvironmentPrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators")-and ($traitement.Length -lt 30))
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 
+#Check Perform volume maintenance tasks
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Perform volume maintenance tasks' is set to 'Administrators'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeManageVolumePrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators")-and ($traitement.Length -lt 30))
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 
+#Check Profile single process
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Profile single process' is set to 'Administrators'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeProfileSingleProcessPrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators")-and ($traitement.Length -lt 30))
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 
-$TableContent = "$TableContent </tbody></table>"
-$TableContent = "$TableContentHead $TableContent"
+#Check Profile system performance
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Profile system performance' is set to 'Administrators, NT SERVICE\WdiServiceHost'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeSystemProfilePrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement  -match "NT SERVICE\\WdiServiceHost"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
-$Report = ConvertTo-HTML -Body "$ToolDetails $ComputerName $OSinfo $ProcessInfo $BiosInfo $DiscInfo $NetworkAdapterInfo $ServicesInfo $LocalAccountInfo $TableContent " -Head $header -Title "SECURITY AUDIT SERVICES, CDAC" -PostContent "<p id='CreationDate'>Creation Date: $(Get-Date)</p>"
+
+#Check Replace a process level token
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Replace a process level token' is set to 'LOCAL SERVICE, NETWORK SERVICE'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeAssignPrimaryTokenPrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "LOCAL SERVICE") -and ($traitement  -match "NETWORK SERVICE"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Restore files and directories
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Restore files and directories' is set to 'Administrators'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeRestorePrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators")-and ($traitement.Length -lt 30))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Shut down the system
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Shut down the system' is set to 'Administrators'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeShutdownPrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators")-and ($traitement.Length -lt 30))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Take ownership of files or other objects
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Take ownership of files or other objects' is set to 'Administrators'"
+$chaineSID = Get-Content $seceditfile |Select-String "SeTakeOwnershipPrivilege"
+$chaineSID = $chaineSID.line
+$traitement = Reverse-SID $chaineSID
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Administrators")-and ($traitement.Length -lt 30))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check lock out policy
+Write-Host "`n [+] Begin Security Options Audit`n" -ForegroundColor DarkGreen
+Start-Sleep -s 1
+
+$ListLocalUser = Get-WmiObject -Class Win32_UserAccount -Filter "LocalAccount='True'"
+foreach ( $user in $ListLocalUser) {
+  if ( $user.sid -like "*-500") {
+    $adminName = $user.Name
+    $adminStatus = $user.Disabled
+    if ($adminStatus -eq $true) {
+      $adminStatus = "Disabled"
+    }
+    else {
+      $adminStatus = "Enabled"
+    }
+  }
+  elseif ( $user.sid -like "*-501") {
+    $guestName = $user.Name
+    $guestStatus = $user.Disabled
+    if ($guestStatus -eq $true) {
+      $guestStatus = "Disabled"
+    }
+    else {
+      $guestStatus = "Enabled"
+    }
+
+  }
+
+}
+#Check Accounts: Administrator account status
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Accounts: Administrator account status' is set to 'Disabled'"
+$traitement = $adminStatus
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Disabled"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+#Check Accounts: Block Microsoft accounts
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Accounts: Block Microsoft accounts' is set to 'Users can't add or log on with Microsoft accounts'"
+$exist = Test-Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System | Select-Object NoConnectedUser
+  $traitement = $traitement.NoConnectedUser
+}
+else {
+  $traitement = "Not configure"
+}
+$data = @("This policy is disabled","Users can't add Microsoft accounts","XXX","Users can't add or log on with Microsoft accounts")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "3"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+#Check Accounts: Guest account status
+$ComplianceIndex +=1
+$ComplianceName		= "Ensure 'Accounts: Guest account status' is set to 'Disabled'"
+$traitement = $guestStatus
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -match "Disabled"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Accounts: Limit local account use of blank passwords to console logon only
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Accounts: Limit local account use of blank passwords to console logon only' is set to 'Enabled'"
+$exist = Test-Path HKLM:\SYSTEM\CurrentControlSet\Control\Lsa
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\Lsa |Select-Object LimitBlankPasswordUse
+  $traitement = $traitement.LimitBlankPasswordUse
+}
+else {
+  $traitement = "not configure"
+}
+$data = @("Disabled","Enabled")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+#Check Accounts: Rename administrator account
+$ComplianceIndex +=1
+$ComplianceName		= "Configure 'Accounts: Rename administrator account'"
+$traitement = $adminName
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -notmatch "Administrator"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+#Check Accounts: Rename guest account
+$ComplianceIndex +=1
+$ComplianceName		= "Configure 'Accounts: Rename guest account'"
+$traitement = $guestName
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (($traitement  -notmatch "Guest"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+$ComplianceHTML = "$ComplianceHTML </tbody></table>"
+$ComplianceHTML = "$ComplianceHTMLHead $ComplianceHTML"
+
+$Report = ConvertTo-HTML -Body "$ToolDetails $ComputerName $OSinfo $ProcessInfo $BiosInfo $DiscInfo $NetworkAdapterInfo $ServicesInfo $LocalAccountInfo $ComplianceHTML " -Head $header -Title "SECURITY AUDIT SERVICES, CDAC" -PostContent "<p id='CreationDate'>Creation Date: $(Get-Date)</p>"
 
 #The command below will generate the report to an HTML file
-$htmlReportFileName = "./CDAC_AUDIT-" + "-" + "$OSName" + ".html"
+$htmlReportFileName = "./CDAC_AUDIT" + "-" + "$OSName" + ".html"
 $Report | Out-File $htmlReportFileName
 
 Set-Location "\"
