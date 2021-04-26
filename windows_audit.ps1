@@ -173,7 +173,7 @@ $ContentHTML	= "$ContentHTML <td>$ComplianceName</td>"
 $ContentHTML	= "$ContentHTML <td>$CurrentValue</td>"
 if ($ComplianceOrNot) {    
 $ContentHTML	= "$ContentHTML <td class='true'>Compliance</td>"
-Write-Host "       [+] "$ComplianceName -ForegroundColor Green
+Write-Host "       [+] "$ComplianceName -ForegroundColor Green 
 }
   else {
 $ContentHTML	= "$ContentHTML <td class='false'>Non Compliance</td>"
@@ -401,7 +401,7 @@ $ComplianceName		= "'Maximum password age' is set to '60 or fewer days, but not 
 $traitement		= Get-Content $seceditfile |Select-String "MaximumPasswordAge" |select-object -First 1 
 $CurrentValue	= $traitement 
 $traitement 	= $traitement  -replace "[^0-9]" , ''
-$ComplianceOrNot	= (($traitement  -gt "0") -and ($traitement  -le "60" )) 
+$ComplianceOrNot	= (([int]$traitement  -gt 0) -and ($traitement  -le 60 )) 
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 
@@ -470,7 +470,7 @@ $ComplianceName		= "Make sure 'Account lockout threshold' is set to '10 or fewer
 $traitement		= Get-Content $nomfichierNetAccount |Select-String -pattern '(Seuil de verrouillage)|(Lockout threshold)'
 $CurrentValue	= $traitement 
 $traitement 	= $traitement  -replace "[^0-9]" , ''
-$ComplianceOrNot	= (($traitement  -gt "0") -and ($traitement  -le "10" )) 
+$ComplianceOrNot	= (([int]$traitement  -gt 0) -and ([int]$traitement  -le 10 )) 
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 
@@ -977,11 +977,14 @@ $exist = Test-Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\Syst
 if ( $exist -eq $true) {
   $traitement = Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System | Select-Object NoConnectedUser
   $traitement = $traitement.NoConnectedUser
+  if($traitement -eq $null){
+	  $traitement  = "5"
+  }
 }
 else {
-  $traitement = "Not configure"
+  $traitement = "2"
 }
-$data = @("This policy is disabled","Users can't add Microsoft accounts","XXX","Users can't add or log on with Microsoft accounts")
+$data = @("This policy is disabled","Users can't add Microsoft accounts","XXX","Users can't add or log on with Microsoft accounts", "Not Configured")
 $CurrentValue	= $data[[int]$traitement]
 $ComplianceOrNot	= (($traitement  -match "3"))  
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
@@ -1004,9 +1007,9 @@ if ( $exist -eq $true) {
   $traitement = $traitement.LimitBlankPasswordUse
 }
 else {
-  $traitement = "not configure"
+  $traitement = "2"
 }
-$data = @("Disabled","Enabled")
+$data = @("Disabled","Enabled","Not configured")
 $CurrentValue	= $data[[int]$traitement]
 $ComplianceOrNot	= (($traitement  -match "1"))  
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
@@ -1026,6 +1029,545 @@ $traitement = $guestName
 $CurrentValue	= $traitement 
 $ComplianceOrNot	= (($traitement  -notmatch "Guest"))  
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Audit: Force audit policy subcategory settings (Windows Vista or later)
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Audit: Force audit policy subcategory settings (Windows Vista or later) to override audit policy category settings' is set"
+$exist = Test-Path HKLM:\SYSTEM\CurrentControlSet\Control\Lsa
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\Lsa |Select-Object SCENoApplyLegacyAuditPolicy
+  $traitement = $traitement.SCENoApplyLegacyAuditPolicy
+  if($traitement -eq $null){
+	  $traitement  = "2"
+  }
+}
+else {
+  $traitement = "999"
+}
+$data = @("Disabled","Enabled","Not Defined")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Audit: Shut down system immediately if unable to log security audits
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Audit: Shut down system immediately if unable to log security audits' is set to 'Disabled'"
+$exist =  Test-Path HKLM:\SYSTEM\CurrentControlSet\Control\Lsa
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\Lsa |Select-Object CrashOnAuditFail
+  $traitement = $traitement.CrashOnAuditFail
+  if($traitement -eq $null){
+	  $traitement  = "2"
+  }
+}
+else {
+  $traitement = "999"
+}
+$data = @("Disabled","Enabled","Not Defined")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "0"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Devices: Allowed to format and eject removable media
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Devices: Allowed to format and eject removable media' is set to 'Administrators and Interactive Users'"
+$exist = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" |Select-Object AllocateDASD
+  $traitement = $traitement.AllocateDASD
+  if($traitement -eq $null){
+	  $traitement  = "3"
+  }
+}
+else {
+  $traitement = "999"
+}
+$data = @("Administrators","Administrators and Power Users","Administrators and Interactive Users","Not Defined")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "2"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Devices: Prevent users from installing printer drivers
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Devices: Prevent users from installing printer drivers' is set to 'Enabled'"
+$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Print\Providers\LanMan Print Services\Servers"
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Print\Providers\LanMan Print Services\Servers" |Select-Object AddPrinterDrivers
+  $traitement = $traitement.AddPrinterDrivers
+  if($traitement -eq $null){
+	  $traitement  = "2"
+  }
+}
+else {
+  $traitement = "999"
+}
+$data = @("Disabled","Enabled","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Domain member: Digitally encrypt or sign secure channel data (always)
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Domain member: Digitally encrypt or sign secure channel data (always)' is set to 'Enabled'"
+$exist = Test-Path HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters |Select-Object RequireSignOrSeal
+  $traitement = $traitement.RequireSignOrSeal
+  if($traitement -eq $null){
+	  $traitement  = "2"
+  }
+}
+else {
+  $traitement = "999"
+}
+$data = @("Disabled","Enabled","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Domain member: Digitally encrypt secure channel data (when possible)
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Domain member: Digitally encrypt secure channel data (when possible)' is set to 'Enabled'"
+$exist = Test-Path HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters |Select-Object SealSecureChannel
+  $traitement = $traitement.SealSecureChannel
+  if($traitement -eq $null){
+	  $traitement  = "2"
+  }
+}
+else {
+  $traitement = "999"
+}
+$data = @("Disabled","Enabled","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Domain member: Digitally sign secure channel data (when possible)
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Domain member: Digitally sign secure channel data (when possible)' is set to 'Enabled'"
+$exist = Test-Path HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters |Select-Object SignSecureChannel
+  $traitement = $traitement.SignSecureChannel
+  if($traitement -eq $null){
+	  $traitement  = "2"
+  }
+}
+else {
+  $traitement = "999"
+}
+$data = @("Disabled","Enabled","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Domain member: Disable machine account password changes
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Domain member: Disable machine account password changes' is set to 'Disabled'"
+$exist = Test-Path HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters |Select-Object DisablePasswordChange
+  $traitement = $traitement.DisablePasswordChange
+  if($traitement -eq $null){
+	  $traitement  = "2"
+  }
+}
+else {
+  $traitement = "999"
+}
+$data = @("Disabled","Enabled","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "0"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Domain member: Disable machine account password changes
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Domain member: Maximum machine account password age' is set to '30 or fewer days, but not 0'"
+$exist = Test-Path HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters |Select-Object MaximumPasswordAge
+  $traitement = $traitement.MaximumPasswordAge  
+}
+else {
+  $traitement = "999"
+}
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (([int]$traitement  -gt 0) -and ([int]$traitement  -le 30 ))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Domain member: Require strong (Windows 2000 or later) session key
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Domain member: Require strong (Windows 2000 or later) session key' is set to 'Enabled'"
+$exist = Test-Path HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters |Select-Object RequireStrongKey
+  $traitement = $traitement.RequireStrongKey
+  if($traitement -eq $null){
+	  $traitement  = "2"
+  }
+}
+else {
+  $traitement = "999"
+}
+$data = @("Disabled","Enabled","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+
+#Check Interactive logon: Do not require CTRL+ALT+DEL
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Interactive logon: Do not require CTRL+ALT+DEL' is set to 'Disabled'"
+$exist = Test-Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System |Select-Object DisableCAD
+  $traitement = $traitement.DisableCAD
+  if($traitement -eq $null){
+	  $traitement  = "2"
+  }
+}
+else {
+  $traitement = "999"
+}
+$data = @("Disabled","Enabled","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "0"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Interactive logon: Don't display last signed-in
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Interactive logon: Don't display last signed-in' is set to 'Enabled'"
+$exist = Test-Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System |Select-Object dontdisplaylastusername
+  $traitement = $traitement.dontdisplaylastusername
+  if($traitement -eq $null){
+	  $traitement  = "2"
+  }
+}
+else {
+  $traitement = "999"
+}
+$data = @("Disabled","Enabled","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Interactive logon: Machine account lockout threshold
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Interactive logon: Machine account lockout threshold' is set to '10 or fewer invalid logon attempts, but not 0'"
+$exist = Test-Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System |Select-Object MaxDevicePasswordFailedAttempts
+  $traitement = $traitement.MaxDevicePasswordFailedAttempts
+ 
+}
+else {
+  $traitement = "999"
+}
+$CurrentValue	= $traitement
+$ComplianceOrNot	= (([int]$traitement  -gt 0) -and ([int]$traitement  -le 10 ))   
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Interactive logon: Machine inactivity limit
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Interactive logon: Machine inactivity limit' is set to '900 or fewer second(s), but not 0'"
+$exist = Test-Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System |Select-Object InactivityTimeoutSecs
+  $traitement = $traitement.InactivityTimeoutSecs
+ 
+}
+else {
+  $traitement = "999"
+}
+$CurrentValue	= $traitement
+$ComplianceOrNot	= (([int]$traitement  -gt 0) -and ([int]$traitement  -le 900 ))   
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Interactive logon: Message text for users attempting to log on
+$ComplianceIndex += 1
+$ComplianceName = "Configure 'Interactive logon: Message text for users attempting to log on'"
+$exist = Test-Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System |Select-Object legalnoticetext
+  $traitement = $traitement.legalnoticetext
+ 
+}
+else {
+  $traitement = ""
+}
+$CurrentValue	= $traitement
+$ComplianceOrNot	= (($traitement.Length  -gt 0))   
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Interactive logon: Message title for users attempting to log on
+$ComplianceIndex += 1
+$ComplianceName = "Configure 'Interactive logon: Message title for users attempting to log on'"
+$exist = Test-Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System |Select-Object legalnoticecaption
+  $traitement = $traitement.legalnoticecaption
+ 
+}
+else {
+  $traitement = ""
+}
+$CurrentValue	= $traitement
+$ComplianceOrNot	= (($traitement.Length  -gt 0))   
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+
+#Check Interactive logon: Number of previous logons to cache (in case domain controller is not available)
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Interactive logon: Number of previous logons to cache (in case domain controller is not available)' is set to '4 or fewer'"
+$exist = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" |Select-Object CachedLogonsCount
+  $traitement = $traitement.CachedLogonsCount
+  if($traitement -eq $null){
+	  $traitement  = "10"
+  }
+}
+else {
+  $traitement = "999"
+}
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (([int]$traitement  -ge 0) -and ([int]$traitement  -le 4 ))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Interactive logon: Prompt user to change password before expiration
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Interactive logon: Prompt user to change password before expiration' is set to 'between 5 and 14 days'"
+$exist = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" |Select-Object PasswordExpiryWarning
+  $traitement = $traitement.PasswordExpiryWarning
+  if($traitement -eq $null){
+	  $traitement  = "15"
+  }
+}
+else {
+  $traitement = "999"
+}
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (([int]$traitement  -ge 5) -and ([int]$traitement  -le 14 ))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Interactive logon: Prompt user to change password before expiration
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Interactive logon: Smart card removal behavior' is set to 'Lock Workstation' or higher"
+$exist = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" |Select-Object ScRemoveOption
+  $traitement = $traitement.ScRemoveOption
+}
+else {
+  $traitement = "999"
+}
+$data = @("No Action","Lock Workstation","Force Logoff","Disconnect if a remote Remote Desktop Services session")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (([int]$traitement  -ge 1))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+
+#Check Microsoft network client: Digitally sign communications (always)
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Microsoft network client: Digitally sign communications (always)' is set to 'Enabled'"
+$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" |Select-Object RequireSecuritySignature
+  $traitement = $traitement.RequireSecuritySignature
+	if($traitement -eq $null){
+	  $traitement  = "2"
+  }
+}
+else {
+  $traitement = "999"
+}
+$data = @("Disabled","Enabled","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Microsoft network client: Digitally sign communications (if server agrees)
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Microsoft network client: Digitally sign communications (if server agrees)' is set to 'Enabled'"
+$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" |Select-Object EnableSecuritySignature
+  $traitement = $traitement.EnableSecuritySignature
+	if($traitement -eq $null){
+	  $traitement  = "2"
+  }
+}
+else {
+  $traitement = "999"
+}
+$data = @("Disabled","Enabled","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Microsoft network client: Send unencrypted password to third-party SMB servers
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Microsoft network client: Send unencrypted password to third-party SMB servers' is set to 'Disabled'"
+$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" |Select-Object EnablePlainTextPassword
+  $traitement = $traitement.EnablePlainTextPassword
+	if($traitement -eq $null){
+	  $traitement  = "2"
+  }
+}
+else {
+  $traitement = "999"
+}
+$data = @("Disabled","Enabled","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "0"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Microsoft network server: Amount of idle time required before suspending session
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Microsoft network server: Amount of idle time required before suspending session' is set to '15 or fewer minute(s)'"
+$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters" |Select-Object AutoDisconnect
+  $traitement = $traitement.AutoDisconnect
+	if($traitement -eq $null){
+	  $traitement  = "999"
+  }
+}
+else {
+  $traitement = "999"
+}
+$CurrentValue	= $traitement 
+$ComplianceOrNot	= (([int]$traitement  -ge 0) -and ([int]$traitement  -le 15 ))
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Microsoft network server: Digitally sign communications (always)
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Microsoft network server: Digitally sign communications (always)' is set to 'Enabled'"
+$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters" |Select-Object RequireSecuritySignature
+  $traitement = $traitement.RequireSecuritySignature
+	if($traitement -eq $null){
+	  $traitement  = "2"
+  }
+}
+else {
+  $traitement = "999"
+}
+$data = @("Disabled","Enabled","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Microsoft network server: Digitally sign communications (if client agrees)
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Microsoft network server: Digitally sign communications (if client agrees)' is set to 'Enabled'"
+$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters" |Select-Object EnableSecuritySignature
+  $traitement = $traitement.EnableSecuritySignature
+	if($traitement -eq $null){
+	  $traitement  = "2"
+  }
+}
+else {
+  $traitement = "999"
+}
+$data = @("Disabled","Enabled","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Microsoft network server: Disconnect clients when logon hours expire
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Microsoft network server: Disconnect clients when logon hours expire' is set to 'Enabled'"
+$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters" |Select-Object EnableForcedLogoff
+  $traitement = $traitement.EnableForcedLogoff
+	if($traitement -eq $null){
+	  $traitement  = "2"
+  }
+}
+else {
+  $traitement = "999"
+}
+$data = @("Disabled","Enabled","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1"))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Microsoft network server: Server SPN target name validation level
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Microsoft network server: Server SPN target name validation level' is set"
+$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters" |Select-Object SmbServerNameHardeningLevel
+  $traitement = $traitement.SmbServerNameHardeningLevel
+	if($traitement -eq $null){
+	  $traitement  = "3"
+  }
+}
+else {
+  $traitement = "999"
+}
+$data = @("Off","Accept if provided by client","Required from client","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (([int]$traitement  -ge 1))  
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+#Check Network access: Allow anonymous SID/Name translation
+$ComplianceIndex += 1
+$ComplianceName = "Ensure 'Network access: Allow anonymous SID/Name translation' is set to 'Disabled'"
+$traitement		= Get-Content $seceditfile |Select-String "LSAAnonymousNameLookup"
+$CurrentValue	= $traitement 
+$traitement 	= $traitement  -replace "[^0-9]" , ''
+$ComplianceOrNot	= ($traitement  -eq "0") 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
+
+
+
+
+
+
 
 
 $ComplianceHTML = "$ComplianceHTML </tbody></table>"
