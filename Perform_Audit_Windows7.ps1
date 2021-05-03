@@ -1,4 +1,4 @@
-#Set-ExecutionPolicy RemoteSigned -force
+Set-ExecutionPolicy RemoteSigned -force
 
 #CSS codes
 $header = @"
@@ -92,7 +92,6 @@ $header = @"
 
 
 </style>
-
 "@
 
 
@@ -101,35 +100,23 @@ $header = @"
 $ComputerName = "<h1>Computer name: $env:computername</h1>"
 
 $Author = @"
-
-
-
-'  :'######::'########:::::'###:::::'######:::::::::::::::::'##:::'##:
-'  '##... ##: ##.... ##:::'## ##:::'##... ##:::::::::::::::: ##::'##::
-'   ##:::..:: ##:::: ##::'##:. ##:: ##:::..::::::::::::::::: ##:'##:::
-'   ##::::::: ##:::: ##:'##:::. ##: ##::::::::::'#######:::: #####::::
-'   ##::::::: ##:::: ##: #########: ##::::::::::........:::: ##. ##:::
-'   ##::: ##: ##:::: ##: ##.... ##: ##::: ##:::::::::::::::: ##:. ##::
-'  . ######:: ########:: ##:::: ##:. ######::::::::::::::::: ##::. ##:
-'  :......:::........:::..:::::..:::......::::::::::::::::::..::::..::
-'  ::::::::::::::::::::SECURITY:::AUDIT:::SERVICES::::::::::::::::::::
-
-
+Script based on the work of Abhijit Chatterjee & Sanjoy Kanrar - CDAC Team  - sa-kol@cdac.in
 "@
-Write-Host $Author -ForegroundColor White -BackgroundColor Blue
+Write-Host $Author
 Write-Host
-Write-Host "Abhijit Chatterjee & Sanjoy Kanrar - CDAC Team  - sa-kol@cdac.in " -ForegroundColor Yellow
+Write-Host "Krzysztof Świdrak AVON CyberSecurityOps&Eng krzysztof.swidrak@avon.com"
 
-Write-Host "[?] Checking for administrative privileges .." -ForegroundColor DarkBlue
+Write-Host "[?] Checking for administrative privileges .." -ForegroundColor DarkRed
 Start-Sleep -s 1
 $isAdmin = ([System.Security.Principal.WindowsPrincipal][System.Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([System.Security.Principal.WindowsBuiltInRole]::Administrator)
     
-if(!$isAdmin){
-            
+if(!$isAdmin){ 
     Write-Warning  "[-] Some of the operations need administrative privileges.`n" 
     Write-Warning  "[*] Please run the script using an administrative account.`n" 
 	Read-Host "Type any key to continue .."
 	exit
+} else {
+    Write-Host "[+] Running with administrative privileges!.`n" -ForegroundColor DarkRed
 }
 
 Write-Host RETRIEVE CONFIGURATION. PLEASE WAIT... -ForegroundColor Yellow -BackgroundColor Black
@@ -137,9 +124,7 @@ Write-Host Please close all other windows until the retrieval is complete.
 Write-Host
 Start-Sleep -s 2
 
-
-
-# Function to reverse SID from SecPol
+# Function to reverse Security Identifiers from SecPol
 Function Reverse-SID ($chaineSID) {
 
   $chaineSID = $chaineSID -creplace '^[^\\]*=', ''
@@ -174,7 +159,6 @@ Function Reverse-SID ($chaineSID) {
 }
 
 function ContentHTML($ComplianceIndex,$ComplianceName,$CurrentValue, $ComplianceOrNot) {
-	
 $ContentHTML	= "<tr ><td>$ComplianceIndex</td>"
 $ContentHTML	= "$ContentHTML <td>$ComplianceName</td>"
 $ContentHTML	= "$ContentHTML <td>$CurrentValue</td>"
@@ -189,25 +173,16 @@ Write-Host "       [-] "$ComplianceName -ForegroundColor Red
 $ContentHTML	= "$ContentHTML </tr>"
 return $ContentHTML
 }
-<#
-# convert ComplianceOrNotHTML 
-function ComplianceOrNotToHTML($flag) {
-  if ($flag) {    
-    return '<td class="true">Compliance</td>'
-  }
-  else {
-    return '<td class="false">Non Compliance</td>'
-  }
+
+# set registry value for compliance
+function setCompliance($ComplianceOrNot, $Path, $Obj, $Value){
+	if($ComplianceOrNot -eq $false){
+		$ans = Read-Host "Do you want to compliance ? [Y/N]: "
+		if($ans -eq "Y"){
+			Set-ItemProperty -Path $Path -Name $Obj -Value $Value
+		}
+	}
 }
-function ComplianceWriteHost($ComplianceName,$flag) {
-  if ($flag) {    
-    Write-Host "       [+] "$ComplianceName -ForegroundColor Green
-  }
-  else {
-    Write-Host "       [-] "$ComplianceName -ForegroundColor Red
-  }
-}
-#>
 
 # convert Stringarray to comma separated liste (String)
 function StringArrayToList($StringArray) {
@@ -239,7 +214,7 @@ Return $Report
 #The command below will get the name of the computer
 $ToolDetails = @"
 <div class='title'>WINDOWS AUDIT TOOLS</div>
-<h2><center>SECURITY AUDIT SERVICES, CDAC</center></h2>
+<h2><center>AVON CYBERSECURITY OPS&ENG</center></h2>
 
 <hr>
 
@@ -252,12 +227,14 @@ $Date = Get-Date -U %d%m%Y
 $auditFile = "audit" + $Date + ".txt"
 
 Write-Host "       [+] Create Audit directory " -ForegroundColor DarkGreen
-
-$auditDirectory = "CDAC_Audit_CONF_" + $Date
+Write-Host "           - I am in: " (Get-Location)
+$auditDirectory = "./Audit_" + $Date
 #Delete the folder if exists
-Remove-Item $auditDirectory -Recurse -ErrorAction Ignore
+Remove-Item $auditDirectory -Recurse -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Name $auditDirectory | Out-Null
 Set-Location $auditDirectory
+Write-Host "           - Created: " (Get-Location)
+$archiveIt=Get-Location
 #Get intel from the machine
 
 $OSInfo = Get-WmiObject Win32_OperatingSystem | Select-Object Caption, Version, ServicePackMajorVersion, OSArchitecture, CSName, WindowsDirectory, NumberOfUsers, BootDevice
@@ -266,19 +243,35 @@ $OSversion = $OSInfo.Caption
 $OSName = $OSInfo.CSName
 $OSArchi = $OSInfo.OSArchitecture
 
-
 #Put it in a file
 Write-Host "       [+] Take Server INFORMATION " -ForegroundColor DarkGreen
 "#########INFO MACHINE#########" > $auditFile
 "Os version: $OSversion " >> $auditFile
 "Machine name : $OSName " >> $auditFile
 "Machine architecture : $OSArchi" >> $auditFile
+
+#Packages Installed
+"##### INSTALLED PRODUCTS #######">>$auditFile
+Get-WmiObject Win32_Product | select Vendor,Version,Name >> $auditFile
+"## ENABLED OPTIONAL FEATURES ###">>$auditFile
+Get-WMIObject Win32_OptionalFeature | Where {$_.InstallState -eq 1} | select Name,Status >> $auditFile
+
 #Start testing
 "#########AUDIT MACHINE#########" >> $auditFile
 $indextest = 1
 $chaine = $null
 $traitement = $null
 
+#Version o PShell - to use CIM or WMI
+Write-Host "       [+] Checking Powershell Version Installed" -ForegroundColor DarkGreen
+$ver=(host | select Version).version
+$flagVer=(host | select Version).version.major
+Write-Host "           Installed version: Powershell" $ver
+if($flagVer -gt 2){
+    Write-Host "           Using CIM Instrumentation." -ForegroundColor Green
+} else {
+    Write-Host "           Using WMI Instrumentation." -ForegroundColor Green
+}
 
 #Take file important for analysis 
 Write-Host "       [+] Take File to analyse `n" -ForegroundColor DarkGreen
@@ -288,26 +281,27 @@ $gpoFile = "./gpo" + "-" + "$OSName" + ".txt"
 gpresult /r /V > $gpoFile | out-null
 $gpoFile = "./gpo" + "-" + "$OSName" + ".html"
 gpresult /h $gpoFile /f | out-null
+
 #Second command in case of emergency
-
-
 $auditConfigFile = "./auditpolicy" + "-" + "$OSName" + ".txt"
-
 auditpol.exe /get /Category:* > $auditConfigFile | out-null
 
-
-
+if($flagVer -gt 2){
 #The command below will get the Operating System INFORMATION, convert the result to HTML code as table and store it to a variable
-$OSinfo = Get-CimInstance -Class Win32_OperatingSystem | ConvertTo-Html -As List -Property Version,Caption,OSArchitecture,CSName,BuildNumber,Manufacturer -Fragment -PreContent "<h2>OPERATING SYSTEM INFORMATION</h2>"
-
+$OSinfo = Get-CimInstance -ClassName Win32_OperatingSystem | ConvertTo-Html -As List -Property Version,Caption,OSArchitecture,CSName,BuildNumber,Manufacturer -Fragment -PreContent "<h2>OPERATING SYSTEM INFORMATION</h2>"
 #The command below will get the Processor INFORMATION, convert the result to HTML code as table and store it to a variable
 $ProcessInfo = Get-CimInstance -ClassName Win32_Processor | ConvertTo-Html -As List -Property DeviceID,Name,Caption,MaxClockSpeed,SocketDesignation,Manufacturer -Fragment -PreContent "<h2>PROCESSOR INFORMATION</h2>"
-
 #The command below will get the BIOS INFORMATION, convert the result to HTML code as table and store it to a variable
 $BiosInfo = Get-CimInstance -ClassName Win32_BIOS | ConvertTo-Html -As List -Property SMBIOSBIOSVersion,Manufacturer,Name,SerialNumber -Fragment -PreContent "<h2>BIOS INFORMATION</h2>"
-
 #The command below will get the details of Disk, convert the result to HTML code as table and store it to a variable
 $Discs = Get-CimInstance -ClassName Win32_LogicalDisk
+} else {
+$OSinfo = Get-WMIObject -Class Win32_OperatingSystem | ConvertTo-Html -As List -Property Version,Caption,OSArchitecture,CSName,BuildNumber,Manufacturer -Fragment -PreContent "<h2>OPERATING SYSTEM INFORMATION</h2>"
+$ProcessInfo = Get-WMIObject -Class Win32_Processor | ConvertTo-Html -As List -Property DeviceID,Name,Caption,MaxClockSpeed,SocketDesignation,Manufacturer -Fragment -PreContent "<h2>PROCESSOR INFORMATION</h2>"
+$BiosInfo = Get-WMIObject -Class Win32_BIOS | ConvertTo-Html -As List -Property SMBIOSBIOSVersion,Manufacturer,Name,SerialNumber -Fragment -PreContent "<h2>BIOS INFORMATION</h2>"
+$Discs = Get-WMIObject -Class Win32_LogicalDisk
+}
+
 $LogicalDrives = @()
 			Foreach ($LDrive in ($Discs | Where {$_.DriveType -eq 3})){
 				$Details = "" | Select "Drive Letter", Label,"Provider Name", "File System", "Disk Size (MB)", "Disk Free Space", "% Free Space"
@@ -325,7 +319,7 @@ $DiscInfo = $LogicalDrives | ConvertTo-Html -Fragment -PreContent "<h2>DISC INFO
 
 
 #The command below will get the details of Network Configuration, convert the result to HTML code as table and store it to a variable
-$Adapters = Get-WmiObject -ClassName Win32_NetworkAdapterConfiguration 
+$Adapters = Get-WmiObject -Class Win32_NetworkAdapterConfiguration 
 $IPInfo = @()
 			Foreach ($Adapter in ($Adapters | Where {$_.IPEnabled -eq $True})) {
 				$Details = "" | Select Description, "Physical address", "IP Address / Subnet Mask", "Default Gateway", "DHCP Enabled", DNS, WINS
@@ -349,23 +343,25 @@ $IPInfo = @()
 			}
 $NetworkAdapterInfo = $IPInfo | ConvertTo-Html -Fragment -PreContent "<h2>NETWORK INFORMATION</h2>"
 
-#The command below will get first 10 services INFORMATION, convert the result to HTML code as table and store it to a variable
-
 #Store the service INFORMATION to an HTML file
 $htmlServiceFileName = "./SERVICES" + "-" + "$OSName" + ".html"
-#$ServicesInfo = Get-CimInstance -ClassName Win32_Service | Select-Object -First 10  |ConvertTo-Html -Property Name,DisplayName,State -Fragment -PreContent "<h2>Services INFORMATION</h2>"
+if($flagVer -gt 2){
 $ServicesInfo = Get-CimInstance -ClassName Win32_Service | ConvertTo-Html -Property Name,DisplayName,State -Fragment -PreContent "<h2>Services INFORMATION of ($OSName)</h2>" > $htmlServiceFileName
 $ServicesInfo = Get-CimInstance -ClassName Win32_Service |ConvertTo-Html -Property Name,DisplayName,State -Fragment -PreContent "<h2  class='accordion'>SERVICES INFORMATION <span class='expando'> [ show ]</span></h2><div class='panel'>" -PostContent "</div>"
+} else {
+$ServicesInfo = Get-WMIObject -Class Win32_Service | ConvertTo-Html -Property Name,DisplayName,State -Fragment -PreContent "<h2>Services INFORMATION of ($OSName)</h2>" > $htmlServiceFileName
+$ServicesInfo = Get-WMIObject -Class Win32_Service |ConvertTo-Html -Property Name,DisplayName,State -Fragment -PreContent "<h2  class='accordion'>SERVICES INFORMATION <span class='expando'> [ show ]</span></h2><div class='panel'>" -PostContent "</div>"
+}
 $ServicesInfo = $ServicesInfo -replace '<td>Running</td>','<td class="RunningStatus">Running</td>'
 $ServicesInfo = $ServicesInfo -replace '<td>Stopped</td>','<td class="StopStatus">Stopped</td>'
 
-#$LocalAccountInfo =  Get-WmiObject -Class Win32_UserAccount -Filter  "LocalAccount='True'" |
-#        Select-Object PSComputerName, Status, Caption, PasswordExpires, AccountType, Description, Disabled, Domain, FullName, InstallDate, LocalAccount, Lockout, Name, PasswordChangeable, PasswordRequired, SID, SIDType | 
-#		 ConvertTo-Html   -PreContent "<h2>LOCAL ACCOUNTS INFORMATION</h2>"
-
+if($flagVer -gt 2){
 $LocalShareInfo = Get-CimInstance -ClassName Win32_Share | ConvertTo-Html  -Property Name,Caption,Path -Fragment -PreContent "<h2>LOCAL SHARES</h2>" 
 $Printers = Get-CimInstance -ClassName Win32_Printer | ConvertTo-Html -Property Name,Location -Fragment -PreContent "<h2>PRINTERS</h2>" 
-
+} else {
+$LocalShareInfo = Get-WMIObject -Class Win32_Share | ConvertTo-Html  -Property Name,Caption,Path -Fragment -PreContent "<h2>LOCAL SHARES</h2>" 
+$Printers = Get-WMIObject -Class Win32_Printer | ConvertTo-Html -Property Name,Location -Fragment -PreContent "<h2>PRINTERS</h2>" 
+}
 $LocalAccountInfo =  Get-WmiObject -Class Win32_UserAccount -Filter  "LocalAccount='True'" |
         Select-Object  Caption, Status, PasswordExpires, AccountType, Description, Disabled, Domain, FullName, InstallDate, LocalAccount, Lockout, Name, PasswordChangeable, PasswordRequired, SID, SIDType | 
 		 ConvertTo-Html  -Property Name, Caption,  Disabled, Description  -PreContent "<h2>LOCAL ACCOUNTS INFORMATION</h2>"
@@ -374,27 +370,19 @@ $LocalAccountInfo > "LocalAccounts-$OSName.html"
 $LocalAccountInfo = $LocalAccountInfo -replace '<td>True</td>','<td class="true">True</td>'
 $LocalAccountInfo = $LocalAccountInfo -replace '<td>False</td>','<td class="false">False</td>'
 
-
-
-
 $ComplianceHTMLHead =  '<h2>WINDOWS COMPLIANCE</h2>'
-
-#Write-Host
-#Write-Host Local Password Policy -ForegroundColor DarkGreen
-#Write-Host ===================== -ForegroundColor DarkGreen
-#    net accounts | Out-Host
-#Write-Host
-
-
 
 Write-Host "CHECKING CIS BENCHMARKS" -ForegroundColor Green 
 Start-Sleep -s 2
 $ComplianceIndex = 0
 $ComplianceHTML = "$ComplianceHTML <table > <tbody><th width='5%'>Sl. No.</th><th width='50%'>Findings</th><th width='30%'>Current Value</th><th width='15%'>Compliance or Not</th></tbody><tbody>"
 
+
+###################################################3
 #Check password Policy
 Write-Host "`n [+] Begin Password Policy Audit`n" -ForegroundColor DarkGreen
 Start-Sleep -s 1
+
 #Check Enforce password history
 $ComplianceIndex += 1 
 $traitement = $null
@@ -418,7 +406,7 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 #Check Minimum password age
 $ComplianceIndex += 1 
 $traitement = $null
-$ComplianceName		= "Minimum password age' is set to '1 or more day"
+$ComplianceName		= "Minimum password age' is set to '1 or more day(s)"
 $traitement		= Get-Content $seceditFile |Select-String "MinimumPasswordAge"
 $CurrentValue	= $traitement 
 $traitement 	= $traitement  -replace "[^0-9]" , ''
@@ -432,7 +420,7 @@ $ComplianceName		= "Ensure 'Minimum password length' is set to '14 or more chara
 $traitement		= Get-Content $seceditFile |Select-String "MinimumPasswordLength"
 $CurrentValue	= $traitement 
 $traitement 	= $traitement  -replace "[^0-9]" , ''
-$ComplianceOrNot	= ($traitement  -ge "1") 
+$ComplianceOrNot	= ($traitement  -ge "14") 
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 #Check Password must meet complexity requirements
@@ -440,6 +428,7 @@ $ComplianceIndex += 1
 $traitement = $null
 $ComplianceName		= "Ensure 'Password must meet complexity requirements' is set to 'Enabled'"
 $traitement		= Get-Content $seceditFile |Select-String "PasswordComplexity"
+Write-Host $traitment
 $CurrentValue	= $traitement 
 $traitement 	= $traitement  -replace "[^0-9]" , ''
 $ComplianceOrNot	= ($traitement  -match "1") 
@@ -456,14 +445,14 @@ $ComplianceOrNot	= ($traitement  -match "0")
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 #check net accounts intel
-#Write-Host " [+] Take Service INFORMATION" -ForegroundColor DarkGreen
 $auditFileNetAccount = "./AccountsPolicy- " + "$OSName" + ".txt"
 net accounts > $auditFileNetAccount
 
-
+############################################################
 #Check Account Lockout Policy
 Write-Host "`n [+] Begin Account Lockout Policy Audit`n" -ForegroundColor DarkGreen
 Start-Sleep -s 1
+
 #Check Account lockout duration
 $ComplianceIndex += 1 
 $traitement = $null
@@ -503,9 +492,8 @@ $ComplianceIndex += 1
 $traitement = $null
 $ComplianceName		= "Ensure 'Access Credential Manager as a trusted caller' is set to 'No One'"
 $traitement		= Get-Content $seceditFile |Select-String "SeTrustedCredManAccessPrivilege"
-$CurrentValue	= $traitement 
-#$traitement 	= $traitement  -replace "[^0-9]" , ''
-$ComplianceOrNot	= (-Not($traitement  -match "SeTrustedCredManAccessPrivilege")) 
+$CurrentValue	= $traitement
+$ComplianceOrNot	= ($traitement  -eq $null)
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 
@@ -531,24 +519,6 @@ $traitement = Reverse-SID $chaineSID
 $CurrentValue	= $traitement 
 $ComplianceOrNot	= ($traitement.Length -eq 0)
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
-
-
-<#
-###Ensure 'Add workstations to domain' is set to 'Administrators'
-$ComplianceIndex += 1 
-$traitement = $null
-
-$ComplianceName		= "(L1)Ensure 'Add workstations to domain' is set to 'Administrators', Must be Administrators "
-
-$chaineSID = Get-Content $seceditFile |Select-String "SeMachineAccountPrivilege"
-$chaineSID = $chaineSID.line
-$traitement = Reverse-SID $chaineSID
-$CurrentValue	= $traitement 
-$ComplianceOrNot	= if ($traitement  -match "Administrator") 
-
-$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
-
-#>
 
 #Check Adjust memory quotas for a process
 $ComplianceIndex += 1 
@@ -580,7 +550,7 @@ $chaineSID = Get-Content $seceditFile |Select-String "SeRemoteInteractiveLogonRi
 $chaineSID = $chaineSID.line
 $traitement = Reverse-SID $chaineSID
 $CurrentValue	= $traitement 
-$ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement  -match "Remote Desktop Users") -and ($traitement  -notmatch "Guest") ) 
+$ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement  -match "Remote Desktop Users") -and ($traitement  -notmatch "Guest") -and ($traitement  -notmatch "Everyone")) 
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 #Check Back up files and directories
@@ -591,7 +561,7 @@ $chaineSID = Get-Content $seceditFile |Select-String "SeBackupPrivilege"
 $chaineSID = $chaineSID.line
 $traitement = Reverse-SID $chaineSID
 $CurrentValue	= $traitement 
-$ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement.Length -lt 30)) 
+$ComplianceOrNot	= ((($traitement  -match "Administrators") -or ($traitement -match "Backup Operators")) -and ($traitment -notmatch "Users") -and ($traitment -notmatch "Guest") -and ($traitment -notmatch "Everyone")) 
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 #Check Change the system time
@@ -646,7 +616,7 @@ $chaineSID = Get-Content $seceditFile |Select-String "SeCreateGlobalPrivilege"
 $chaineSID = $chaineSID.line
 $traitement = Reverse-SID $chaineSID
 $CurrentValue	= $traitement 
-$ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement  -match "LOCAL SERVICE")  -and ($traitement  -match "SERVICE")) 
+$ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement  -match "SERVICE"))
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 #Check Create permanent shared objects
@@ -784,12 +754,12 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 #Check Increase scheduling priority
 $ComplianceIndex += 1 
 $traitement = $null
-$ComplianceName		= "Ensure 'Increase scheduling priority' is set to 'Administrators, Window Manager\Window Manager Group'"
+$ComplianceName		= "Ensure 'Increase scheduling priority' is set to 'Administrators'"
 $chaineSID = Get-Content $seceditFile |Select-String "SeIncreaseBasePriorityPrivilege"
 $chaineSID = $chaineSID.line
 $traitement = Reverse-SID $chaineSID
 $CurrentValue	= $traitement 
-$ComplianceOrNot	= (($traitement  -match "Administrators") -and ($traitement  -match "Window Manager\\Window Manager Group"))  
+$ComplianceOrNot	= (($traitement  -match "Administrators"))  
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 #Check Load and unload device drivers
@@ -947,7 +917,7 @@ $CurrentValue	= $traitement
 $ComplianceOrNot	= (($traitement  -match "Administrators")-and ($traitement.Length -lt 30))  
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
-
+##############################################################
 #Check lock out policy
 Write-Host "`n [+] Begin Security Options Audit`n" -ForegroundColor DarkGreen
 Start-Sleep -s 1
@@ -990,9 +960,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Accounts: Block Microsoft accounts' is set to 'Users can't add or log on with Microsoft accounts'"
-$exist = Test-Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System | Select-Object NoConnectedUser
+  $traitement = Get-ItemProperty $path | Select-Object NoConnectedUser
   $traitement = $traitement.NoConnectedUser
   if($traitement -eq $null){
 	  $traitement  = "5"
@@ -1020,9 +991,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Accounts: Limit local account use of blank passwords to console logon only' is set to 'Enabled'"
-$exist = Test-Path HKLM:\SYSTEM\CurrentControlSet\Control\Lsa
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\Lsa |Select-Object LimitBlankPasswordUse
+  $traitement = Get-ItemProperty $path |Select-Object LimitBlankPasswordUse
   $traitement = $traitement.LimitBlankPasswordUse
 }else{
 
@@ -1055,10 +1027,11 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 #Check Audit: Force audit policy subcategory settings (Windows Vista or later)
 $ComplianceIndex += 1 
 $traitement = $null
-$ComplianceName = "Ensure 'Audit: Force audit policy subcategory settings (Windows Vista or later) to override audit policy category settings' is set"
-$exist = Test-Path HKLM:\SYSTEM\CurrentControlSet\Control\Lsa
+$ComplianceName = "Ensure 'Audit: Force audit policy subcategory settings (Windows Vista or later) to override audit policy category settings' is set to 'Enabled'"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\Lsa |Select-Object SCENoApplyLegacyAuditPolicy
+  $traitement = Get-ItemProperty $path |Select-Object SCENoApplyLegacyAuditPolicy
   $traitement = $traitement.SCENoApplyLegacyAuditPolicy
   if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1074,9 +1047,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Audit: Shut down system immediately if unable to log security audits' is set to 'Disabled'"
-$exist =  Test-Path HKLM:\SYSTEM\CurrentControlSet\Control\Lsa
+$exist =  Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Control\Lsa |Select-Object CrashOnAuditFail
+  $traitement = Get-ItemProperty $path |Select-Object CrashOnAuditFail
   $traitement = $traitement.CrashOnAuditFail
   if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1092,9 +1066,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Devices: Allowed to format and eject removable media' is set to 'Administrators and Interactive Users'"
-$exist = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" |Select-Object AllocateDASD
+  $traitement = Get-ItemProperty $path |Select-Object AllocateDASD
   $traitement = $traitement.AllocateDASD
   if($traitement -eq $null){
 	  $traitement  = "3"
@@ -1110,9 +1085,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Devices: Prevent users from installing printer drivers' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Print\Providers\LanMan Print Services\Servers"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\Print\Providers\LanMan Print Services\Servers"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Print\Providers\LanMan Print Services\Servers" |Select-Object AddPrinterDrivers
+  $traitement = Get-ItemProperty $path |Select-Object AddPrinterDrivers
   $traitement = $traitement.AddPrinterDrivers
   if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1128,9 +1104,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Domain member: Digitally encrypt or sign secure channel data (always)' is set to 'Enabled'"
-$exist = Test-Path HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters |Select-Object RequireSignOrSeal
+  $traitement = Get-ItemProperty $path |Select-Object RequireSignOrSeal
   $traitement = $traitement.RequireSignOrSeal
   if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1146,9 +1123,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Domain member: Digitally encrypt secure channel data (when possible)' is set to 'Enabled'"
-$exist = Test-Path HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters |Select-Object SealSecureChannel
+  $traitement = Get-ItemProperty $path |Select-Object SealSecureChannel
   $traitement = $traitement.SealSecureChannel
   if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1164,9 +1142,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Domain member: Digitally sign secure channel data (when possible)' is set to 'Enabled'"
-$exist = Test-Path HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters |Select-Object SignSecureChannel
+  $traitement = Get-ItemProperty $path |Select-Object SignSecureChannel
   $traitement = $traitement.SignSecureChannel
   if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1182,9 +1161,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Domain member: Disable machine account password changes' is set to 'Disabled'"
-$exist = Test-Path HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters |Select-Object DisablePasswordChange
+  $traitement = Get-ItemProperty $path |Select-Object DisablePasswordChange
   $traitement = $traitement.DisablePasswordChange
   if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1200,9 +1180,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Domain member: Maximum machine account password age' is set to '30 or fewer days, but not 0'"
-$exist = Test-Path HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters |Select-Object MaximumPasswordAge
+  $traitement = Get-ItemProperty $path |Select-Object MaximumPasswordAge
   $traitement = $traitement.MaximumPasswordAge  
 }
 $CurrentValue	= $traitement 
@@ -1214,9 +1195,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Domain member: Require strong (Windows 2000 or later) session key' is set to 'Enabled'"
-$exist = Test-Path HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty HKLM:\SYSTEM\CurrentControlSet\Services\Netlogon\Parameters |Select-Object RequireStrongKey
+  $traitement = Get-ItemProperty $path |Select-Object RequireStrongKey
   $traitement = $traitement.RequireStrongKey
   if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1233,9 +1215,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Interactive logon: Do not require CTRL+ALT+DEL' is set to 'Disabled'"
-$exist = Test-Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System |Select-Object DisableCAD
+  $traitement = Get-ItemProperty $path |Select-Object DisableCAD
   $traitement = $traitement.DisableCAD
   if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1251,9 +1234,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Interactive logon: Don't display last signed-in' is set to 'Enabled'"
-$exist = Test-Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System |Select-Object dontdisplaylastusername
+  $traitement = Get-ItemProperty $path |Select-Object dontdisplaylastusername
   $traitement = $traitement.dontdisplaylastusername
   if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1269,9 +1253,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Interactive logon: Machine account lockout threshold' is set to '10 or fewer invalid logon attempts, but not 0'"
-$exist = Test-Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System |Select-Object MaxDevicePasswordFailedAttempts
+  $traitement = Get-ItemProperty $path |Select-Object MaxDevicePasswordFailedAttempts
   $traitement = $traitement.MaxDevicePasswordFailedAttempts
 }
 $CurrentValue	= $traitement
@@ -1283,9 +1268,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Interactive logon: Machine inactivity limit' is set to '900 or fewer second(s), but not 0'"
-$exist = Test-Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System |Select-Object InactivityTimeoutSecs
+  $traitement = Get-ItemProperty $path |Select-Object InactivityTimeoutSecs
   $traitement = $traitement.InactivityTimeoutSecs
 }
 $CurrentValue	= $traitement
@@ -1297,9 +1283,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Configure 'Interactive logon: Message text for users attempting to log on'"
-$exist = Test-Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System |Select-Object legalnoticetext
+  $traitement = Get-ItemProperty $path |Select-Object legalnoticetext
   $traitement = $traitement.legalnoticetext
 }else{
 
@@ -1314,9 +1301,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Configure 'Interactive logon: Message title for users attempting to log on'"
-$exist = Test-Path HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System |Select-Object legalnoticecaption
+  $traitement = Get-ItemProperty $path |Select-Object legalnoticecaption
   $traitement = $traitement.legalnoticecaption
 }else{
 
@@ -1332,9 +1320,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Interactive logon: Number of previous logons to cache (in case domain controller is not available)' is set to '4 or fewer'"
-$exist = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" |Select-Object CachedLogonsCount
+  $traitement = Get-ItemProperty $path |Select-Object CachedLogonsCount
   $traitement = $traitement.CachedLogonsCount
   if($traitement -eq $null){
 	  $traitement  = "10"
@@ -1349,9 +1338,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Interactive logon: Prompt user to change password before expiration' is set to 'between 5 and 14 days'"
-$exist = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" |Select-Object PasswordExpiryWarning
+  $traitement = Get-ItemProperty $path |Select-Object PasswordExpiryWarning
   $traitement = $traitement.PasswordExpiryWarning
   if($traitement -eq $null){
 	  $traitement  = "15"
@@ -1366,9 +1356,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Interactive logon: Smart card removal behavior' is set to 'Lock Workstation' or higher"
-$exist = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Winlogon" |Select-Object ScRemoveOption
+  $traitement = Get-ItemProperty $path |Select-Object ScRemoveOption
   $traitement = $traitement.ScRemoveOption
 }
 $data = @("No Action","Lock Workstation","Force Logoff","Disconnect if a remote Remote Desktop Services session")
@@ -1377,14 +1368,14 @@ $ComplianceOrNot	= (([int]$traitement  -ge 1))
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 
-
 #Check Microsoft network client: Digitally sign communications (always)
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Microsoft network client: Digitally sign communications (always)' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" |Select-Object RequireSecuritySignature
+  $traitement = Get-ItemProperty $path |Select-Object RequireSecuritySignature
   $traitement = $traitement.RequireSecuritySignature
 	if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1400,9 +1391,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Microsoft network client: Digitally sign communications (if server agrees)' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" |Select-Object EnableSecuritySignature
+  $traitement = Get-ItemProperty $path |Select-Object EnableSecuritySignature
   $traitement = $traitement.EnableSecuritySignature
 	if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1418,9 +1410,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Microsoft network client: Send unencrypted password to third-party SMB servers' is set to 'Disabled'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanmanWorkstation\Parameters" |Select-Object EnablePlainTextPassword
+  $traitement = Get-ItemProperty $path |Select-Object EnablePlainTextPassword
   $traitement = $traitement.EnablePlainTextPassword
 	if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1436,9 +1429,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Microsoft network server: Amount of idle time required before suspending session' is set to '15 or fewer minute(s)'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters" |Select-Object AutoDisconnect
+  $traitement = Get-ItemProperty $path |Select-Object AutoDisconnect
   $traitement = $traitement.AutoDisconnect
 	if($traitement -eq $null){
 	  $traitement  = "999"
@@ -1453,9 +1447,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Microsoft network server: Digitally sign communications (always)' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters" |Select-Object RequireSecuritySignature
+  $traitement = Get-ItemProperty $path |Select-Object RequireSecuritySignature
   $traitement = $traitement.RequireSecuritySignature
 	if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1471,9 +1466,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Microsoft network server: Digitally sign communications (if client agrees)' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters" |Select-Object EnableSecuritySignature
+  $traitement = Get-ItemProperty $path |Select-Object EnableSecuritySignature
   $traitement = $traitement.EnableSecuritySignature
 	if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1489,9 +1485,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Microsoft network server: Disconnect clients when logon hours expire' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters" |Select-Object EnableForcedLogoff
+  $traitement = Get-ItemProperty $path |Select-Object EnableForcedLogoff
   $traitement = $traitement.EnableForcedLogoff
 	if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1506,10 +1503,11 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 #Check Microsoft network server: Server SPN target name validation level
 $ComplianceIndex += 1 
 $traitement = $null
-$ComplianceName = "Ensure 'Microsoft network server: Server SPN target name validation level' is set"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+$ComplianceName = "Ensure 'Microsoft network server: Server SPN target name validation level' is set ' is set to 'Accept if provided by client' or higher"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters" |Select-Object SmbServerNameHardeningLevel
+  $traitement = Get-ItemProperty $path |Select-Object SmbServerNameHardeningLevel
   $traitement = $traitement.SmbServerNameHardeningLevel
 	if($traitement -eq $null){
 	  $traitement  = "3"
@@ -1517,8 +1515,10 @@ if ( $exist -eq $true) {
 }
 $data = @("Off","Accept if provided by client","Required from client","Not configured")
 $CurrentValue	= $data[[int]$traitement]
-$ComplianceOrNot	= (([int]$traitement  -ge 1))  
+$ComplianceOrNot	= (([int]$traitement  -eq 1) -or ([int]$traitement  -eq 2))  
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+
 
 
 #Check Network access: Allow anonymous SID/Name translation
@@ -1535,9 +1535,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure  'Network access: Do not allow anonymous enumeration of SAM accounts' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" |Select-Object RestrictAnonymousSAM
+  $traitement = Get-ItemProperty $path |Select-Object RestrictAnonymousSAM
   $traitement = $traitement.RestrictAnonymousSAM
 	if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1552,9 +1553,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Network access: Do not allow anonymous enumeration of SAM accounts and shares' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" |Select-Object RestrictAnonymous
+  $traitement = Get-ItemProperty $path |Select-Object RestrictAnonymous
   $traitement = $traitement.RestrictAnonymous
 	if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1569,9 +1571,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Network access: Do not allow storage of passwords and credentials for network authentication' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" |Select-Object DisableDomainCreds
+  $traitement = Get-ItemProperty $path |Select-Object DisableDomainCreds
   $traitement = $traitement.DisableDomainCreds
 	if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1586,9 +1589,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Network access: Let Everyone permissions apply to anonymous users' is not set to 'Disabled'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" |Select-Object EveryoneIncludesAnony
+  $traitement = Get-ItemProperty $path |Select-Object EveryoneIncludesAnony
   $traitement = $traitement.EveryoneIncludesAnony
 	if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1603,41 +1607,45 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Network access: Named Pipes that can be accessed anonymously' is set to 'None'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters" |Select-Object NullSessionPipes
+  $traitement = Get-ItemProperty $path |Select-Object NullSessionPipes
   $traitement = $traitement.NullSessionPipes
 }else{
 
   $traitement = ""
 }
 $CurrentValue	= $traitement
-$ComplianceOrNot	= (($traitement.Length  -eq 0) -or ($traitement.Length  -lt 5)) 
+$ComplianceOrNot	= (($traitement.Length  -eq 0) -or ($traitement -eq 'None') -or ($traitement -eq 'none')) 
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 #Check Network access: Remotely accessible registry paths
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Network access: Remotely accessible registry paths' is set"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurePipeServers\Winreg\AllowedExactPaths"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\SecurePipeServers\Winreg\AllowedExactPaths"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\SecurePipeServers\Winreg\AllowedExactPaths" |Select-Object Machine
+  $traitement = Get-ItemProperty $path |Select-Object Machine
   $traitement = $traitement.Machine
 }else{
 
   $traitement = ""
 }
 $CurrentValue	= $traitement
-$ComplianceOrNot	= (($traitement  -match "ProductOptions") -and ($traitement  -match "ProductOptions")-and ($traitement  -match "ProductOptions")) 
+$ComplianceOrNot	= (($traitement  -match "System\\CurrentControlSet\\Control\\ProductOptions") -and ($traitement  -match "System\\CurrentControlSet\\Control\\Server Applications
+")-and ($traitement  -match "SOFTWARE\\Microsoft\\Windows NT\\CurrentVersion")) 
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 #Check Network access: Remotely accessible registry paths and sub-paths
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Network access: Remotely accessible registry paths and sub-paths' is set"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\SecurePipeServers\Winreg\AllowedPaths"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\SecurePipeServers\Winreg\AllowedPaths"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\SecurePipeServers\Winreg\AllowedPaths" |Select-Object Machine
+  $traitement = Get-ItemProperty $path |Select-Object Machine
   $traitement = $traitement.Machine
 }else{
 
@@ -1658,9 +1666,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Network access: Restrict anonymous access to Named Pipes and Shares' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters" |Select-Object RestrictNullSessAccess
+  $traitement = Get-ItemProperty $path |Select-Object RestrictNullSessAccess
   $traitement = $traitement.RestrictNullSessAccess
 	if($traitement -eq $null){
 	  $traitement  = "2"
@@ -1675,9 +1684,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Network access: Restrict clients allowed to make remote calls to SAM' is set to 'Administrators: Remote Access: Allow'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" |Select-Object RestrictRemoteSAM
+  $traitement = Get-ItemProperty $path |Select-Object RestrictRemoteSAM
   $traitement = $traitement.RestrictRemoteSAM
 	if($traitement -eq $null){
 	  $traitement  = "Not Defined"
@@ -1691,9 +1701,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Network access: Shares that can be accessed anonymously' is set to 'None'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LanManServer\Parameters" |Select-Object NullSessionShares
+  $traitement = Get-ItemProperty $path |Select-Object NullSessionShares
   $traitement = $traitement.NullSessionShares
   if($traitement -eq $null){
 	  $traitement  = ""
@@ -1710,9 +1721,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Network access: Sharing and security model for local accounts' is set to 'Classic - local users authenticate as themselves'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" |Select-Object ForceGuest
+  $traitement = Get-ItemProperty $path |Select-Object ForceGuest
   $traitement = $traitement.ForceGuest
   if($traitement -eq $null){
   $traitement  = "2"
@@ -1727,9 +1739,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Network security: Allow Local System to use computer identity for NTLM' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" |Select-Object UseMachineId
+  $traitement = Get-ItemProperty $path |Select-Object UseMachineId
   $traitement = $traitement.UseMachineId
   if($traitement -eq $null){
   $traitement  = "2"
@@ -1744,9 +1757,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Network security: Allow LocalSystem NULL session fallback' is set to 'Disabled'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0" |Select-Object AllowNullSessionFallback
+  $traitement = Get-ItemProperty $path |Select-Object AllowNullSessionFallback
   $traitement = $traitement.AllowNullSessionFallback
   if($traitement -eq $null){
   $traitement  = "2"
@@ -1763,15 +1777,16 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Network Security: Allow PKU2U authentication requests to this computer to use online identities' is set to 'Disabled'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\pku2u"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\pku2u"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\pku2u" |Select-Object AllowOnlineID
+  $traitement = Get-ItemProperty $path |Select-Object AllowOnlineID
   $traitement = $traitement.AllowOnlineID
   if($traitement -eq $null){
-  $traitement  = "2"
+  $traitement  = 2
   }
 }else{
-	$traitement  = "2"
+	$traitement  = 2
 }
 $data = @("Disabled","Enabled","Not Defined")
 $CurrentValue	= $data[[int]$traitement]
@@ -1782,9 +1797,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1
 $traitement = $null
 $ComplianceName = "Ensure 'Network security: Configure encryption types allowed for Kerberos' is set to 'AES128_HMAC_SHA1, AES256_HMAC_SHA1, Future encryption types'"
-$exist = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters"
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System\Kerberos\Parameters" |Select-Object SupportedEncryptionTypes
+  $traitement = Get-ItemProperty $path |Select-Object SupportedEncryptionTypes
   $traitement = $traitement.SupportedEncryptionTypes
   if($traitement -eq $null){
 	  $traitement  = "Not Defined"
@@ -1793,16 +1809,20 @@ if ( $exist -eq $true) {
 	$traitement  = "Not Defined"
 }
 $CurrentValue	= $traitement
-$ComplianceOrNot	= (([int]$traitement  -eq 2147483640))  
+if($traitment -notmatch "Not Defined"){
+    $ComplianceOrNot	= (($traitement  -eq 2147483640))  
+} else {
+    $ComplianceOrNot=$false
+}
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
-
 #Check Network security: Do not store LAN Manager hash value on next password change
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Network security: Do not store LAN Manager hash value on next password change' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
-if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" |Select-Object NoLMHash
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$exist = Test-Path $path
+if ($exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object NoLMHash
   $traitement = $traitement.NoLMHash
   if($traitement -eq $null){
   $traitement  = "2"
@@ -1817,9 +1837,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Network security: LAN Manager authentication level' is set to 'Send NTLMv2 response only. Refuse LM & NTLM'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa" |Select-Object LmCompatibilityLevel
+  $traitement = Get-ItemProperty $path |Select-Object LmCompatibilityLevel
   $traitement = $traitement.LmCompatibilityLevel
   if($traitement -eq $null){
   $traitement  = "6"
@@ -1837,9 +1858,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Network security: LDAP client signing requirements' is set to 'Negotiate signing' or higher"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Services\LDAP"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Services\LDAP"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Services\LDAP" |Select-Object LDAPClientIntegrity
+  $traitement = Get-ItemProperty $path |Select-Object LDAPClientIntegrity
   $traitement = $traitement.LDAPClientIntegrity
   if($traitement -eq $null){
   $traitement  = "3"
@@ -1854,9 +1876,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1
 $traitement = $null
 $ComplianceName = "Ensure 'Network security: Minimum session security for NTLM SSP based (including secure RPC) clients' is set to 'Require NTLMv2 session security, Require 128-bit encryption'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0" |Select-Object NTLMMinClientSec
+  $traitement = Get-ItemProperty $path |Select-Object NTLMMinClientSec
   $traitement = $traitement.NTLMMinClientSec
   if($traitement -eq $null){
 	  $traitement  = "Not Defined"
@@ -1872,9 +1895,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1
 $traitement = $null
 $ComplianceName = "Ensure 'Network security: Minimum session security for NTLM SSP based (including secure RPC) servers' is set to 'Require NTLMv2 session security, Require 128-bit encryption'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Lsa\MSV1_0" |Select-Object NTLMMinServerSec
+  $traitement = Get-ItemProperty $path |Select-Object NTLMMinServerSec
   $traitement = $traitement.NTLMMinServerSec
   if($traitement -eq $null){
 	  $traitement  = "Not Defined"
@@ -1890,9 +1914,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1
 $traitement = $null
 $ComplianceName = "Ensure 'System cryptography: Force strong key protection for user keys stored on the computer' is set to 'User is prompted when the key is first used' or higher "
-$exist = Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\Cryptography"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\Cryptography"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\Cryptography" |Select-Object ForceKeyProtection
+  $traitement = Get-ItemProperty $path |Select-Object ForceKeyProtection
   $traitement = $traitement.ForceKeyProtection
   if($traitement -eq $null){
   $traitement  = "3"
@@ -1908,9 +1933,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'System objects: Require case insensitivity for non-Windows subsystems' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Kernel"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Kernel"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\Kernel" |Select-Object ObCaseInsensitive
+  $traitement = Get-ItemProperty $path |Select-Object ObCaseInsensitive
   $traitement = $traitement.ObCaseInsensitive
   if($traitement -eq $null){
   $traitement  = "2"
@@ -1925,9 +1951,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'System objects: Strengthen default permissions of internal system objects (e.g. Symbolic Links)' is set to 'Enabled'"
-$exist = Test-Path "HKLM:SYSTEM\CurrentControlSet\Control\Session Manager"
+$path =  "HKLM:SYSTEM\CurrentControlSet\Control\Session Manager"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:SYSTEM\CurrentControlSet\Control\Session Manager" |Select-Object ProtectionMode
+  $traitement = Get-ItemProperty $path |Select-Object ProtectionMode
   $traitement = $traitement.ProtectionMode
   if($traitement -eq $null){
   $traitement  = "2"
@@ -1938,13 +1965,31 @@ $CurrentValue	= $data[[int]$traitement]
 $ComplianceOrNot	= (($traitement  -match "1")) 
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
+#Check System objects: Optional subsystems 
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'System settings: Optional subsystems' is set to 'Defined: (blank)'"
+$path =  "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\SubSystems"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object Optional
+  $traitement = $traitement.Optional
+  if($traitement -eq $null){
+    $traitement  = ""
+  }
+}
+$CurrentValue=$traitment
+$ComplianceOrNot	= (($traitement.Length  -eq 0)) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
 #Check User Account Control: Admin Approval Mode for the Built-in Administrator account
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'User Account Control: Admin Approval Mode for the Built-in Administrator account' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" |Select-Object FilterAdministratorToken
+  $traitement = Get-ItemProperty $path |Select-Object FilterAdministratorToken
   $traitement = $traitement.FilterAdministratorToken
   if($traitement -eq $null){
   $traitement  = "2"
@@ -1959,9 +2004,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'User Account Control: Behavior of the elevation prompt for administrators in Admin Approval Mode' is set to 'Prompt for consent on the secure desktop'"
-$exist = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" |Select-Object ConsentPromptBehaviorAdmin
+  $traitement = Get-ItemProperty $path |Select-Object ConsentPromptBehaviorAdmin
   $traitement = $traitement.ConsentPromptBehaviorAdmin
   if($traitement -eq $null){
   $traitement  = "6"
@@ -1978,9 +2024,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'User Account Control: Behavior of the elevation prompt for standard users' is set to 'Automatically deny elevation requests'"
-$exist = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" |Select-Object ConsentPromptBehaviorUser
+  $traitement = Get-ItemProperty $path |Select-Object ConsentPromptBehaviorUser
   $traitement = $traitement.ConsentPromptBehaviorUser
   if($traitement -eq $null){
   $traitement  = "2"
@@ -1996,9 +2043,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'User Account Control: Detect application installations and prompt for elevation' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" |Select-Object EnableInstallerDetection
+  $traitement = Get-ItemProperty $path |Select-Object EnableInstallerDetection
   $traitement = $traitement.EnableInstallerDetection
   if($traitement -eq $null){
   $traitement  = "2"
@@ -2013,9 +2061,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'User Account Control: Only elevate UIAccess applications that are installed in secure locations' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" |Select-Object EnableSecureUIAPaths
+  $traitement = Get-ItemProperty $path |Select-Object EnableSecureUIAPaths
   $traitement = $traitement.EnableSecureUIAPaths
   if($traitement -eq $null){
   $traitement  = "2"
@@ -2030,9 +2079,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'User Account Control: Run all administrators in Admin Approval Mode' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" |Select-Object EnableLUA
+  $traitement = Get-ItemProperty $path |Select-Object EnableLUA
   $traitement = $traitement.EnableLUA
   if($traitement -eq $null){
   $traitement  = "2"
@@ -2047,9 +2097,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'User Account Control: Switch to the secure desktop when prompting for elevation' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" |Select-Object PromptOnSecureDesktop
+  $traitement = Get-ItemProperty $path |Select-Object PromptOnSecureDesktop
   $traitement = $traitement.PromptOnSecureDesktop
   if($traitement -eq $null){
   $traitement  = "2"
@@ -2064,9 +2115,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'User Account Control: Virtualize file and registry write failures to per-user locations' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" |Select-Object EnableVirtualization
+  $traitement = Get-ItemProperty $path |Select-Object EnableVirtualization
   $traitement = $traitement.EnableVirtualization
   if($traitement -eq $null){
   $traitement  = "2"
@@ -2076,21 +2128,15 @@ $data = @("Disabled","Enabled","Not Defined")
 $CurrentValue	= $data[[int]$traitement]
 $ComplianceOrNot	= (($traitement  -match "1")) 
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
-
-
-
-
-
-
-
 
 #Check User Account Control: Virtualize file and registry write failures to per-user locations
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'User Account Control: Virtualize file and registry write failures to per-user locations' is set to 'Enabled'"
-$exist = Test-Path "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$path =  "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Policies\System" |Select-Object EnableVirtualization
+  $traitement = Get-ItemProperty $path |Select-Object EnableVirtualization
   $traitement = $traitement.EnableVirtualization
   if($traitement -eq $null){
   $traitement  = "2"
@@ -2101,20 +2147,126 @@ $CurrentValue	= $data[[int]$traitement]
 $ComplianceOrNot	= (($traitement  -match "1")) 
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
+###########################################################BY SWIDRAK
+#Check Services
+Write-Host "`n [+] Begin System Services`n" -ForegroundColor DarkGreen
+Start-Sleep -s 1
 
+$iterator=0
+$compName=@(
+"'Bluetooth Support Service (bthserv)' is set to 'Disabled'",
+"'Computer Browser (Browser)' is set to 'Disabled' or 'Not Installed'",
+"'HomeGroup Listener (HomeGroupListener)' is set to 'Disabled'",
+"'HomeGroup Provider (HomeGroupProvider)' is set to 'Disabled'",
+"'IIS Admin Service (IISADMIN)' is set to 'Disabled' or 'Not Installed'",
+"'Internet Connection Sharing (ICS) (SharedAccess)' is set to 'Disabled'",
+"'Link-Layer Topology Discovery Mapper (lltdsvc)' is set to 'Disabled'",
+"''Media Center Extender Service (Mcx2Svc)' is set to 'Disabled' or 'Not Installed'",
+"'Microsoft FTP Service (FTPSVC)' is set to 'Disabled' or 'Not Installed'",
+"''Microsoft iSCSI Initiator Service (MSiSCSI)' is set to 'Disabled'",
+"'Peer Name Resolution Protocol (PNRPsvc)' is set to 'Disabled'",
+"'Peer Networking Grouping (p2psvc)' is set to 'Disabled'",
+"'Peer Networking Identity Manager (p2pimsvc)' is set to 'Disabled'",
+"'PNRP Machine Name Publication Service (PNRPAutoReg)' is set to 'Disabled'",
+"'Problem Reports and Solutions Control Panel Support (wercplsupport)' is set to 'Disabled'",
+"'Remote Access Auto Connection Manager (RasAuto)' is set to 'Disabled'",
+"'Remote Desktop Configuration (SessionEnv)' is set to 'Disabled'",
+"''Remote Desktop Services (TermService)' is set to 'Disabled'",
+"'Remote Desktop Services UserMode Port Redirector (UmRdpService)' is set to 'Disabled'",
+"'Remote Procedure Call (RPC) Locator (RpcLocator)' is set to 'Disabled'",
+"'Remote Registry (RemoteRegistry)' is set to 'Disabled'",
+"'Routing and Remote Access (RemoteAccess)' is set to 'Disabled'",
+"''Server (LanmanServer)' is set to 'Disabled'",
+"'Simple TCP/IP Services (simptcp)' is set to 'Disabled' or 'Not Installed'",
+"''SNMP Service (SNMP)' is set to 'Disabled' or 'Not Installed'",
+"'SSDP Discovery (SSDPSRV)' is set to 'Disabled'",
+"'Telnet (TlntSvr)' is set to 'Disabled' or 'Not Installed'",
+"'UPnP Device Host (upnphost)' is set to 'Disabled'",
+"'Web Management Service (WMSvc)' is set to 'Disabled' or 'Not Installed'",
+"'Windows CardSpace (idsvc)' is set to 'Disabled' or 'Not Installed'",
+"'Windows Error Reporting Service (WerSvc)' is set to 'Disabled'",
+"'Windows Event Collector (Wecsvc)' is set to 'Disabled'",
+"'Windows Media Center Receiver Service (ehRecvr)' is set to 'Disabled' or 'Not Installed'",
+"'Windows Media Center Scheduler Service (ehSched)' is set to 'Disabled' or 'Not Installed'",
+"'Windows Media Player Network Sharing Service (WMPNetworkSvc)' is set to 'Disabled' or 'Not Installed'",
+"'Windows Remote Management (WS-Management) (WinRM)' is set to 'Disabled'",
+"'WinHTTP Web Proxy Auto-Discovery Service (WinHttpAutoProxySvc)' is set to 'Disabled'",
+"'World Wide Web Publishing Service (W3SVC)' is set to 'Disabled' or 'Not Installed'"
+)
+$srvces=@(
+"\SYSTEM\CurrentControlSet\Services\bthserv",
+"\SYSTEM\CurrentControlSet\Services\Browser",
+"\SYSTEM\CurrentControlSet\Services\HomeGroupListener",
+"\SYSTEM\CurrentControlSet\Services\HomeGroupProvider",
+"\SYSTEM\CurrentControlSet\Services\IISADMIN",
+"\SYSTEM\CurrentControlSet\Services\SharedAccess",
+"\SYSTEM\CurrentControlSet\Services\lltdsvc",
+"\SYSTEM\CurrentControlSet\Services\Mcx2Svc",
+"\SYSTEM\CurrentControlSet\Services\FTPSVC",
+"\SYSTEM\CurrentControlSet\Services\MSiSCSI",
+"\SYSTEM\CurrentControlSet\Services\PNRPsvc",
+"\SYSTEM\CurrentControlSet\Services\p2psvc",
+"\SYSTEM\CurrentControlSet\Services\p2pimsvc",
+"\SYSTEM\CurrentControlSet\Services\PNRPAutoReg",
+"\SYSTEM\CurrentControlSet\Services\wercplsupport",
+"\SYSTEM\CurrentControlSet\Services\RasAuto",
+"\SYSTEM\CurrentControlSet\Services\SessionEnv",
+"\SYSTEM\CurrentControlSet\Services\TermService",
+"\SYSTEM\CurrentControlSet\Services\UmRdpService",
+"\SYSTEM\CurrentControlSet\Services\RpcLocator",
+"\SYSTEM\CurrentControlSet\Services\RemoteRegistry",
+"\SYSTEM\CurrentControlSet\Services\RemoteAccess",
+"\SYSTEM\CurrentControlSet\Services\LanmanServer",
+"\SYSTEM\CurrentControlSet\Services\simptcp",
+"\SYSTEM\CurrentControlSet\Services\SNMP",
+"\SYSTEM\CurrentControlSet\Services\SSDPSRV",
+"\SYSTEM\CurrentControlSet\Services\TlntSvr",
+"\SYSTEM\CurrentControlSet\Services\upnphost",
+"\SYSTEM\CurrentControlSet\Services\WMSvc",
+"\SYSTEM\CurrentControlSet\Services\idsvc",
+"\SYSTEM\CurrentControlSet\Services\WerSvc",
+"\SYSTEM\CurrentControlSet\Services\Wecsvc",
+"\SYSTEM\CurrentControlSet\Services\ehRecvr",
+"\SYSTEM\CurrentControlSet\Services\ehSched",
+"\SYSTEM\CurrentControlSet\Services\WMPNetworkSvc",
+"\SYSTEM\CurrentControlSet\Services\WinRM",
+"\SYSTEM\CurrentControlSet\Services\WinHttpAutoProxySvc",
+"\SYSTEM\CurrentControlSet\Services\W3SVC"
+)
 
+foreach ($nameCurr in $compName){
+    $ComplianceIndex += 1 
+    $traitement = $null
+    $ComplianceName = "Ensure System Service: "+$nameCurr
+    $path =  "HKLM:"+$srvces[$iterator]
+    $exist = Test-Path $path
+        if ( $exist -eq $true) {
+            $traitement = Get-ItemProperty $path |Select-Object Start
+            $traitement = $traitement.Start
+            if($traitement -eq $null){
+            $traitement  = "6"
+        }
+    }
+    $data = @("Boot","System","Auto Load","Manual","Disable","Delayed Start","Not Defined/Installed")
+    $CurrentValue	= $data[[int]$traitement]
+    $ComplianceOrNot=(($traitement -match "4") -or ($traitement -match "6")) 
+    $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+    $iterator+=1
+}
 
-
-
-
+###########################################################
+#Check Windows Firewall
+Write-Host "`n [+] Begin Windows Firewall Audit`n" -ForegroundColor DarkGreen
+Start-Sleep -s 1
 
 #Check User Windows Firewall: Domain: Firewall state
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Windows Firewall: Domain: Firewall state' is set to 'On (recommended)'"
-$exist = Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile" |Select-Object EnableFirewall
+  $traitement = Get-ItemProperty $path |Select-Object EnableFirewall
   $traitement = $traitement.EnableFirewall
   if($traitement -eq $null){
   $traitement  = "2"
@@ -2131,9 +2283,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Windows Firewall: Domain: Inbound connections' is set to 'Block (default)'"
-$exist = Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile" |Select-Object DefaultInboundAction
+  $traitement = Get-ItemProperty $path |Select-Object DefaultInboundAction
   $traitement = $traitement.DefaultInboundAction
   if($traitement -eq $null){
   $traitement  = "2"
@@ -2150,9 +2303,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Windows Firewall: Domain: Outbound connections' is set to 'Allow (default)'"
-$exist = Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile" |Select-Object DefaultOutboundAction
+  $traitement = Get-ItemProperty $path |Select-Object DefaultOutboundAction
   $traitement = $traitement.DefaultOutboundAction
   if($traitement -eq $null){
   $traitement  = "2"
@@ -2169,9 +2323,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Windows Firewall: Domain: Settings: Display a notification' is set to 'No'"
-$exist = Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile" |Select-Object DisableNotifications
+  $traitement = Get-ItemProperty $path |Select-Object DisableNotifications
   $traitement = $traitement.DisableNotifications
   if($traitement -eq $null){
   $traitement  = "2"
@@ -2188,9 +2343,10 @@ $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $C
 $ComplianceIndex += 1 
 $traitement = $null
 $ComplianceName = "Ensure 'Windows Firewall: Domain: Logging: Name' is set to '%SystemRoot%\System32\logfiles\firewall\domainfw.log'"
-$exist = Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile\Logging"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile\Logging"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile\Logging" |Select-Object LogFilePath
+  $traitement = Get-ItemProperty $path |Select-Object LogFilePath
   $traitement = $traitement.LogFilePath
   if($traitement -eq $null){
   $traitement  = ""
@@ -2199,16 +2355,17 @@ if ( $exist -eq $true) {
 	$traitement  = ""
 }
 $CurrentValue	= $traitement
-$ComplianceOrNot	= (($traitement  -match 'System32\domainfw.log')) 
+$ComplianceOrNot	= (($traitement  -match 'System32\\domainfw.log')) 
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
-#Check User Windows Firewall: Domain: Logging: Name
+#Check Windows Firewall: Domain: Logging: Size limit (KB)
 $ComplianceIndex += 1 
 $traitement = $null
-$ComplianceName = " Ensure 'Windows Firewall: Domain: Logging: Size limit (KB)' is set to '16,384 KB or greater'"
-$exist = Test-Path "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile\Logging"
+$ComplianceName = "Ensure 'Windows Firewall: Domain: Logging: Size limit (KB)' is set to '16,384 KB or greater'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile\Logging"
+$exist = Test-Path $path
 if ( $exist -eq $true) {
-  $traitement = Get-ItemProperty "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile\Logging" |Select-Object LogFileSize
+  $traitement = Get-ItemProperty $path |Select-Object LogFileSize
   $traitement = $traitement.LogFileSize
   if($traitement -eq $null){
   $traitement  = ""
@@ -2220,21 +2377,421 @@ $CurrentValue	= $traitement
 $ComplianceOrNot	= (([int]$traitement  -ge '16384')) 
 $ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
+#Check Windows Firewall: Domain: Logging: Log dropped packets
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Domain: Logging: Log dropped packets' is set to 'Yes'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile\Logging"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object LogDroppedPackets
+  $traitement = $traitement.LogDroppedPackets
+  if($traitement -eq $null){
+  $traitement  = "2"
+  }
+}else{
+	$traitement  = "2"
+}
+$data = @("No (default)","Yes","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+#Check Windows Firewall: Domain: Logging: Log successful connections
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Domain: Logging: Log successful connections' is set to 'Yes'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\DomainProfile\Logging"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object LogSuccessfulConnections
+  $traitement = $traitement.LogSuccessfulConnections
+  if($traitement -eq $null){
+  $traitement  = "2"
+  }
+}else{
+	$traitement  = "2"
+}
+$data = @("No (default)","Yes","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+#Check User Windows Firewall: Private: Firewall state
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Private: Firewall state' is set to 'On (recommended)'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PrivateProfile"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object EnableFirewall
+  $traitement = $traitement.EnableFirewall
+  if($traitement -eq $null){
+  $traitement  = "2"
+  }
+}else{
+	$traitement  = "2"
+}
+$data = @("Off","On (recommended)","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+#Check User Windows Firewall: Private: Inbound connections
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Private: Inbound connections' is set to 'Block (default)'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PrivateProfile"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object DefaultInboundAction
+  $traitement = $traitement.DefaultInboundAction
+  if($traitement -eq $null){
+  $traitement  = "2"
+  }
+}else{
+	$traitement  = "2"
+}
+$data = @("Allow","Block (default)","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+#Check User Windows Firewall: Private: Outbound connections
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Private: Outbound connections' is set to 'Allow (default)'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PrivateProfile"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object DefaultOutboundAction
+  $traitement = $traitement.DefaultOutboundAction
+  if($traitement -eq $null){
+  $traitement  = "2"
+  }
+}else{
+	$traitement  = "2"
+}
+$data = @("Allow (default)","Block","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+#Check User Windows Firewall: Private: Settings: Display a notification
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Private: Settings: Display a notification' is set to 'No'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PrivateProfile"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object DisableNotifications
+  $traitement = $traitement.DisableNotifications
+  if($traitement -eq $null){
+  $traitement  = "2"
+  }
+}else{
+	$traitement  = "2"
+}
+$data = @("Yes","No","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+#Check User Windows Firewall: Private: Logging: Name
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Private: Logging: Name' is set to '%SystemRoot%\System32\logfiles\firewall\privatefw.log'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PrivateProfile\Logging"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object LogFilePath
+  $traitement = $traitement.LogFilePath
+  if($traitement -eq $null){
+  $traitement  = ""
+  }
+}else{
+	$traitement  = ""
+}
+$CurrentValue	= $traitement
+$ComplianceOrNot	= (($traitement  -match 'System32\\privatefw.log')) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+#Check Windows Firewall: Private: Logging: Size limit (KB)
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Private: Logging: Size limit (KB)' is set to '16,384 KB or greater'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PrivateProfile\Logging"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object LogFileSize
+  $traitement = $traitement.LogFileSize
+  if($traitement -eq $null){
+  $traitement  = ""
+  }
+}else{
+	$traitement  = ""
+}
+$CurrentValue	= $traitement
+$ComplianceOrNot	= (([int]$traitement  -ge '16384')) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+#Check Windows Firewall: Private: Logging: Log dropped packets
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Private: Logging: Log dropped packets' is set to 'Yes'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PrivateProfile\Logging"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object LogDroppedPackets
+  $traitement = $traitement.LogDroppedPackets
+  if($traitement -eq $null){
+  $traitement  = "2"
+  }
+}else{
+	$traitement  = "2"
+}
+$data = @("No (default)","Yes","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+#Check Windows Firewall: Private: Logging: Log successful connections
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Private: Logging: Log successful connections' is set to 'Yes'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PrivateProfile\Logging"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object LogSuccessfulConnections
+  $traitement = $traitement.LogSuccessfulConnections
+  if($traitement -eq $null){
+  $traitement  = "2"
+  }
+}else{
+	$traitement  = "2"
+}
+$data = @("No (default)","Yes","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+#Check User Windows Firewall: Public: Firewall state
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Public: Firewall state' is set to 'On (recommended)'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PublicProfile"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object EnableFirewall
+  $traitement = $traitement.EnableFirewall
+  if($traitement -eq $null){
+  $traitement  = "2"
+  }
+}else{
+	$traitement  = "2"
+}
+$data = @("Off","On (recommended)","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
+
+#Check User Windows Firewall: Public: Inbound connections
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Public: Inbound connections' is set to 'Block (default)'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PublicProfile"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object DefaultInboundAction
+  $traitement = $traitement.DefaultInboundAction
+  if($traitement -eq $null){
+  $traitement  = "2"
+  }
+}else{
+	$traitement  = "2"
+}
+$data = @("Allow","Block (default)","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 
+#Check User Windows Firewall: Public: Outbound connections
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Public: Outbound connections' is set to 'Allow (default)'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PublicProfile"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object DefaultOutboundAction
+  $traitement = $traitement.DefaultOutboundAction
+  if($traitement -eq $null){
+  $traitement  = "2"
+  }
+}else{
+	$traitement  = "2"
+}
+$data = @("Allow (default)","Block","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
+#Check User Windows Firewall: Public: Settings: Display a notification
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Public: Settings: Display a notification' is set to 'No'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PublicProfile"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object DisableNotifications
+  $traitement = $traitement.DisableNotifications
+  if($traitement -eq $null){
+  $traitement  = "2"
+  }
+}else{
+	$traitement  = "2"
+}
+$data = @("Yes","No","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
+#Check User Windows Firewall: Public: Settings: Apply local firewall rules
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Public: Settings: Apply local firewall rules' is set to 'No'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PublicProfile"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object AllowLocalPolicyMerge
+  $traitement = $traitement.AllowLocalPolicyMerge
+  if($traitement -eq $null){
+  $traitement  = "2"
+  }
+}else{
+	$traitement  = "2"
+}
+$data = @("No","Yes (default)","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
+#Check User Windows Firewall: Public: Settings: : Apply local connection security rules
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Public: Settings: : Apply local connection security rules' is set to 'No'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PublicProfile"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object AllowLocalIPsecPolicyMerge
+  $traitement = $traitement.AllowLocalIPsecPolicyMerge
+  if($traitement -eq $null){
+  $traitement  = "2"
+  }
+}else{
+	$traitement  = "2"
+}
+$data = @("No","Yes (default)","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
+#Check User Windows Firewall: Public: Logging: Name
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Public: Logging: Name' is set to '%SystemRoot%\System32\logfiles\firewall\publicfw.log'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PublicProfile\Logging"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object LogFilePath
+  $traitement = $traitement.LogFilePath
+  if($traitement -eq $null){
+  $traitement  = ""
+  }
+}else{
+	$traitement  = ""
+}
+$CurrentValue	= $traitement
+$ComplianceOrNot	= (($traitement  -match 'System32\\publicfw.log')) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
+#Check User Windows Firewall: Public: Logging: Name
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Public: Logging: Name' is set to '%SystemRoot%\System32\logfiles\firewall\publicfw.log'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PublicProfile\Logging"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object LogFilePath
+  $traitement = $traitement.LogFilePath
+  if($traitement -eq $null){
+  $traitement  = ""
+  }
+}else{
+	$traitement  = ""
+}
+$CurrentValue	= $traitement
+$ComplianceOrNot	= (($traitement  -match 'System32\\publicfw.log')) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
+#Check Windows Firewall: Public: Logging: Size limit (KB)
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Public: Logging: Size limit (KB)' is set to '16,384 KB or greater'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PublicProfile\Logging"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object LogFileSize
+  $traitement = $traitement.LogFileSize
+  if($traitement -eq $null){
+  $traitement  = ""
+  }
+}else{
+	$traitement  = ""
+}
+$CurrentValue	= $traitement
+$ComplianceOrNot	= (([int]$traitement  -ge '16384')) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
+#Check Windows Firewall: Public: Logging: Log dropped packets
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Public: Logging: Log dropped packets' is set to 'Yes'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PublicProfile\Logging"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object LogDroppedPackets
+  $traitement = $traitement.LogDroppedPackets
+  if($traitement -eq $null){
+  $traitement  = "2"
+  }
+}else{
+	$traitement  = "2"
+}
+$data = @("No (default)","Yes","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
-
-
-
-
-
+#Check Windows Firewall: Public: Logging: Log successful connections
+$ComplianceIndex += 1 
+$traitement = $null
+$ComplianceName = "Ensure 'Windows Firewall: Public: Logging: Log successful connections' is set to 'Yes'"
+$path =  "HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\PublicProfile\Logging"
+$exist = Test-Path $path
+if ( $exist -eq $true) {
+  $traitement = Get-ItemProperty $path |Select-Object LogSuccessfulConnections
+  $traitement = $traitement.LogSuccessfulConnections
+  if($traitement -eq $null){
+  $traitement  = "2"
+  }
+}else{
+	$traitement  = "2"
+}
+$data = @("No (default)","Yes","Not configured")
+$CurrentValue	= $data[[int]$traitement]
+$ComplianceOrNot	= (($traitement  -match "1")) 
+$ComplianceHTML += ContentHTML $ComplianceIndex $ComplianceName $CurrentValue $ComplianceOrNot
 
 $ComplianceHTML = "$ComplianceHTML </tbody></table>"
 $ComplianceHTML = "$ComplianceHTMLHead $ComplianceHTML"
@@ -2258,17 +2815,15 @@ for (i = 0; i < acc.length; i++) {
 }
 </script>
 "@
+Get-ChildItem -Path 'HKLM:\SYSTEM\CurrentControlSet\services\SharedAccess\Parameters\FirewallPolicy\' | select Name | % {$s="Registry::"+$_.Name; Get-ItemProperty -Path $s -Name *}>./aduit_Firewall_service_Shared.log
+Get-ChildItem -Path 'HKLM:\SOFTWARE\Policies\Microsoft\WindowsFirewall\' -ErrorAction SilentlyContinue | select Name | % {$s="Registry::"+$_.Name; Get-ItemProperty -Path $s -Name *}>./aduit_Firewall_service_Policies.log
 $Report = ConvertTo-HTML -Body "$ToolDetails $ComputerName $OSinfo $ProcessInfo $BiosInfo $DiscInfo $NetworkAdapterInfo $LocalShareInfo  $Printers $ServicesInfo $LocalAccountInfo $ComplianceHTML $footer" -Head $header -Title "SECURITY AUDIT SERVICES, CDAC" -PostContent "<p id='CreationDate'>Creation Date: $(Get-Date)</p>"
 
 #The command below will generate the report to an HTML file
-$htmlReportFileName = "./CDAC_AUDIT" + "-" + "$OSName" + ".html"
+$htmlReportFileName = "./AUDIT_REPORT" + "-" + "$OSName" + ".html"
 $Report | Out-File $htmlReportFileName
 
-Set-Location "\"
+Write-Host "`n`nAudit Completed at $(Get-Date) `n" -ForegroundColor DarkGreen
 
-Write-Host "`n`nAudit Completed at $(Get-Date) `n" -ForegroundColor DarkYellow
-
-Read-Host -Prompt "Press Enter to exit"
-#To Convert powershell script to exe 
-# Install-Module ps2exe
-#Invoke-ps2exe .\cdac_ps.ps1 .\cdac_windows_audit.exe -company "CDAC, Kolkata"
+$msgprompt="The audit has finished. Please provide the compressed " + $archiveIt + " and send it to the CyberSecOps&Eng of AVON! Thank you! Press Enter to exit"
+Read-Host -Prompt $msgprompt
